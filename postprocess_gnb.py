@@ -1,7 +1,11 @@
 import sys
 import re
 import queue
+import json
 from loguru import logger
+
+#logger.remove()
+#logger.add(sys.stderr, level="INFO")
 
 from collections import deque
 
@@ -35,9 +39,6 @@ except FileNotFoundError:
 except Exception as e:
     print(f"An error occurred: {str(e)}")
 
-KWS_IN_U = 'phy.demodulatestart'
-
-
 KW_R = 'gtp.out'    # first, find the lines including this
 
 # go back a few lines, find the first line that includes
@@ -59,7 +60,7 @@ KW_MAC_DEM = 'mac.demuxed'
 KW_MAC_DEC = 'mac.decoded' # this is the key to recognize the retransmissions
 
 # maximum number of lines to check
-MAX_DEPTH = 100
+MAX_DEPTH = 500
 
 
 # example:
@@ -114,7 +115,7 @@ def find_MAC_DEC(hqpid_value,hqround,prev_lines,line_number):
             mac_dec_arr.append({
                 'timestamp':timestamp,
                 'frame':fm_value,
-                'sl_value':sl_value,
+                'slot':sl_value,
                 'hqpid':hqpid_value,
                 'hqround':hqround_counter
             })
@@ -131,20 +132,22 @@ def find_MAC_DEC(hqpid_value,hqround,prev_lines,line_number):
     return mac_dec_arr
 
 
+ip_packets_counter = 0
 previous_lines = RingBuffer(MAX_DEPTH)
-journeys = []
+print("[")
 for line_number, line in enumerate(file, start=1):
     previous_lines.append(line)
 
     if KW_R in line:
         line = line.replace('\n', '')
-        
+    
         # Use regular expressions to extract the numbers
         timestamp_match = re.search(r'^(\d+\.\d+)', line)
         len_match = re.search(r'len(\d+)', line)
         sn_match = re.search(r'sn(\d+)', line)
 
         if len_match and sn_match and timestamp_match:
+
             timestamp = float(timestamp_match.group(1))
             len_value = int(len_match.group(1))
             sn_value = int(sn_match.group(1))
@@ -333,10 +336,19 @@ for line_number, line in enumerate(file, start=1):
             
             journey[KW_RLC] = RLC_ARR
 
-            print(journey)
+            if ip_packets_counter > 0:
+                print(",", end="")
+            
+            print(json.dumps(journey))
+
+            ip_packets_counter = ip_packets_counter+1
 
         else:
             logger.error(f"Couldn't extract values from the line {line_number}")
             break
 else:
-    print(f"'{KW_R}' not found in the file.")
+    logger.debug(f"'{KW_R}' no more in the file.")
+
+logger.info(f"Found {ip_packets_counter} ip packets.")
+
+print("]")
