@@ -1,4 +1,5 @@
-# UE Uplink
+
+# Uplink Packets Journey
 
 `pdcp_data_req` function in `openair2/LAYER2/nr_pdcp/nr_pdcp_oai_api.c:1402` 
 
