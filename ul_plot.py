@@ -59,7 +59,7 @@ if __name__ == "__main__":
     ax1.set_title("RAN Delay")
     ax1.set_ylabel("Probability")
     ax1.set_xlabel("Delay [ms]")
-    ax1.set_xlim(0, 20)  # Set x limits
+    #ax1.set_xlim(0, 20)  # Set x limits
     
 
     # queuing delay + scheduling delay
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     ax2.set_title("Queue + Scheduling delay")
     ax2.set_ylabel("Probability")
     ax2.set_xlabel("Delay [ms]")
-    ax2.set_xlim(2, 6)  # Set x limits
+    #ax2.set_xlim(2, 6)  # Set x limits
 
     # Transmission delay
     # "rlc.queue.segments.0.rlc.txpdu.timestamp" - "rlc.queue.timestamp"
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     ax3.set_title("TX Delay")
     ax3.set_ylabel("Probability")
     ax3.set_xlabel("Delay [ms]")
-    ax3.set_xlim(0, 20)  # Set x limits
+    #ax3.set_xlim(0, 20)  # Set x limits
 
     # rlc queue
     rlcqueue = df["rlc.queue.queue"]
@@ -107,7 +107,8 @@ if __name__ == "__main__":
     df['non_empty_count'] = df[['rlc.reassembled.0.rlc.reassembled.timestamp',
                             'rlc.reassembled.1.rlc.reassembled.timestamp',
                             'rlc.reassembled.2.rlc.reassembled.timestamp',
-                            'rlc.reassembled.3.rlc.reassembled.timestamp']].count(axis=1)
+                            #'rlc.reassembled.3.rlc.reassembled.timestamp',
+                        ]].count(axis=1)
     
     # Plot histogram
     ax5.hist(df['non_empty_count'], bins=100, density=True, alpha=0.75, color='blue')
@@ -121,8 +122,8 @@ if __name__ == "__main__":
     df['hqround_total'] = (
         df['rlc.reassembled.0.mac.demuxed.hqround'] +
         df['rlc.reassembled.1.mac.demuxed.hqround'] +
-        df['rlc.reassembled.2.mac.demuxed.hqround'] +
-        df['rlc.reassembled.3.mac.demuxed.hqround']
+        df['rlc.reassembled.2.mac.demuxed.hqround'] #+
+        #df['rlc.reassembled.3.mac.demuxed.hqround']
     )
     
     # Plot histogram
