@@ -25,8 +25,8 @@ def read_parquet_file(file_path):
 
 if __name__ == "__main__":
     # Check if the file name is provided as a command-line argument
-    if len(sys.argv) != 2:
-        logger.error("Usage: python script_name.py <parquet_file>")
+    if len(sys.argv) != 3:
+        logger.error("Usage: python script_name.py <parquet_file> <output_figure_file>")
         sys.exit(1)
 
     # Get the Parquet file name from the command-line argument
@@ -136,6 +136,6 @@ if __name__ == "__main__":
     plt.tight_layout()
 
     # Save the figure to a file
-    plt.savefig("res.png")
+    plt.savefig(sys.argv[2])
 
     
