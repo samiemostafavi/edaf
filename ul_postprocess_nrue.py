@@ -61,7 +61,7 @@ KW_MAC_2 = 'mac.harq'
 
 
 # maximum number of lines to check
-MAX_DEPTH = 100
+MAX_DEPTH = 500
 
 
 # example retx:

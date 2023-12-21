@@ -5,24 +5,28 @@ Create a folder and name it using the `*_results` format. Place the openairinter
 
 ## Uplink latency sequencing
 
-The results folder in the examples below is named `2_results`.
+The results folder in the examples below is named `6_results`.
 
 1. Process gNB lseq file:
     ```
-    python tools/rdtsctots.py 2_results/latseq.30102023_152306.lseq > 2_results/gnb.lseq
-    python ul_postprocess_gnb.py 2_results/gnb.lseq > 2_results/gnbjourneys.json
+    python tools/rdtsctots.py 6_results/gnb/latseq.30102023_152306.lseq > 6_results/gnb/gnb.lseq
+    python ul_postprocess_gnb.py 6_results/gnb/gnb.lseq > 6_results/gnb/gnbjourneys.json
     ```
 
 2. Process UE lseq file:
     ```
-    python tools/rdtsctots.py 2_results/latseq.30102023_152306.lseq > 2_results/nrue_tmp.lseq
-    tac 2_results/nrue_tmp.lseq > 2_results/nrue.lseq
-    python ul_postprocess_nrue.py 2_results/nrue.lseq > 2_results/nruejourneys.json
+    python tools/rdtsctots.py 6_results/ue/latseq.30102023_152306.lseq > 6_results/ue/nrue_tmp.lseq
+    tac 6_results/ue/nrue_tmp.lseq > 6_results/ue/nrue.lseq
+    python ul_postprocess_nrue.py 6_results/ue/nrue.lseq > 6_results/ue/nruejourneys.json
     ```
 
-3. Combine `json` files and produce `parquet` file using `ul_parser.ipynb`
-
-4. Create RAN latency, TX latency, queuing delays, etc:
+3. Combine `json` files and produce `parquet` file using:
     ```
-    python ul_plot.py 2_results/journeys.parquet 2_results/res.png
+    python ul_combine.py 6_results/gnb/gnbjourneys.json 6_results/ue/nruejourneys.json 6_results/upf/se_12-1-1-2_59708_20231116_104859.json.gz 6_results/journeys.parquet
+    ```
+
+4. Process and decompose latency:
+    ```
+    python ul_decompose_plot.py 6_results/journeys.parquet 6_results
+    python ul_time_plot.py 6_results/journeys.parquet 6_results
     ```

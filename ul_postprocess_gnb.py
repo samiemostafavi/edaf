@@ -4,8 +4,8 @@ import queue
 import json
 from loguru import logger
 
-#logger.remove()
-#logger.add(sys.stderr, level="INFO")
+logger.remove()
+logger.add(sys.stderr, level="INFO")
 
 from collections import deque
 
