@@ -76,14 +76,33 @@ if __name__ == "__main__":
     df['rlc.reassembled.num_segments'] = df.apply(get_num_segments, axis=1)
 
     # Add a new column: first_hqround_rx_ts
-    def get_first_hqround_rx_ts(row):
-        hqround_value = row[f'rlc.reassembled.0.mac.demuxed.hqround']
-        decoded_slot_column = f'rlc.reassembled.0.mac.demuxed.mac.decoded.{hqround_value}.timestamp'
-        return row[decoded_slot_column]
-    # Apply the function to filter rows
-    df['rlc.reassembled.0.mac.demuxed.mac.decoded.first.timestamp'] = df.apply(get_first_hqround_rx_ts, axis=1)
+    def get_first_hqround_rx_ts(row,seg):
+        if seg != -1:
+            hqround_value = row[f'rlc.reassembled.{seg}.mac.demuxed.hqround']
+            if hqround_value >= 0:
+                decoded_slot_column = f'rlc.reassembled.{seg}.mac.demuxed.mac.decoded.{int(hqround_value)}.timestamp'
+                return row[decoded_slot_column]
+            else:
+                return np.NaN
+        else:
+            hqround_value = row[f"rlc.reassembled.{row['rlc.reassembled.num_segments']}.mac.demuxed.hqround"]
+            if hqround_value >= 0:
+                decoded_slot_column = f"rlc.reassembled.{row['rlc.reassembled.num_segments']}.mac.demuxed.mac.decoded.{int(hqround_value)}.timestamp"
+                return row[decoded_slot_column]
+            else:
+                return np.NaN
+    for seg in range(MAX_SEGMENTS):
+        if f'rlc.reassembled.{seg}.mac.demuxed.mac.decoded.0.timestamp' in df:
+            df[f'rlc.reassembled.{seg}.mac.demuxed.mac.decoded.first.timestamp'] = df.apply(get_first_hqround_rx_ts, args=(seg,), axis=1)
+    df['rlc.reassembled.first.mac.demuxed.mac.decoded.first.timestamp'] = df.apply(get_first_hqround_rx_ts, args=(-1,), axis=1)
 
-    # Add a new row: last_segment_txpdu_ts
+    # Add a new column: rlc.reassembled.first
+    def get_first_segment_reassembly_ts(row):
+        first_seg_column = f"rlc.reassembled.{row['rlc.reassembled.num_segments']}.mac.demuxed.mac.decoded.0.timestamp"
+        return row[first_seg_column]
+    df["rlc.reassembled.first.mac.demuxed.mac.decoded.0.timestamp"] = df.apply(get_first_segment_reassembly_ts, axis=1)
+
+    # Add a new column: last_segment_txpdu_ts
     def get_last_segment_txpdu_ts(row):
         last_seg = 0
         for i in range(MAX_SEGMENTS):
@@ -92,7 +111,6 @@ if __name__ == "__main__":
                     last_seg = i
         last_seg_column = f'rlc.queue.segments.{last_seg}.rlc.txpdu.timestamp'
         return row[last_seg_column]
-    # Apply the function to filter rows
     df['rlc.queue.segments.last.rlc.txpdu.timestamp'] = df.apply(get_last_segment_txpdu_ts, axis=1)
 
     # Create plots
@@ -118,7 +136,7 @@ if __name__ == "__main__":
     # Plot histogram
     ax = axs[axnum]
     #ax.set_xlim(0, 80)  # Set x limits
-    ax.set_ylim(1e-4, 1)
+    ax.set_ylim(1e-5, 1)
     sns.ecdfplot(timestamp_difference, complementary=True, log_scale=(False, True), ax=ax, color='Blue')
     #ax.hist(ran_timestamp_difference, bins=100, density=True, cumulative=-1, log=True, alpha=0.75, color='blue')
     ax.set_title("End-to-End Delay")
@@ -143,7 +161,7 @@ if __name__ == "__main__":
     # Plot histogram
     ax = axs[axnum]
     #ax.set_xlim(0, 80)  # Set x limits
-    ax.set_ylim(1e-4, 1)
+    ax.set_ylim(1e-5, 1)
     sns.ecdfplot(timestamp_difference, complementary=True, log_scale=(False, True), ax=ax, color='Blue')
     #ax.hist(timestamp_difference, bins=100, density=True, cumulative=-1, log=True, alpha=0.75, color='blue')
     ax.set_title("Core Delay")
@@ -166,7 +184,7 @@ if __name__ == "__main__":
     # Plot histogram
     ax = axs[axnum]
     #ax.set_xlim(0, 15)  # Set x limits
-    ax.set_ylim(1e-4, 1)
+    ax.set_ylim(1e-5, 1)
     sns.ecdfplot(timestamp_difference, complementary=True, log_scale=(False, True), ax=ax, color='Blue')
     #ax.hist(timestamp_difference, bins=100, density=True, cumulative=-1, log=True, alpha=0.75, color='blue')
     ax.set_title("Queuing Delay")
@@ -178,18 +196,18 @@ if __name__ == "__main__":
     ################### Link Delay ###################
     # "rlc.reassembled.0.mac.demuxed.mac.decoded.timestamp" - "rlc.queue.segments.0.rlc.txpdu.timestamp"
     # Extract timestamp columns as series
-    timestamp1 = df["rlc.reassembled.0.mac.demuxed.mac.decoded.0.timestamp"]
-    timestamp2 = df["rlc.queue.segments.0.rlc.txpdu.timestamp"]
+    timestamp1 = df["rlc.queue.segments.0.rlc.txpdu.timestamp"]
+    timestamp2 = df["rlc.reassembled.0.mac.demuxed.mac.decoded.0.timestamp"]
 
     # Convert timestamps to milliseconds and calculate the difference
-    timestamp_difference = (timestamp1 - timestamp2) * 1000
+    timestamp_difference = (timestamp2 - timestamp1) * 1000
     df['link_delay'] = timestamp_difference
     df['link_delay_perc'] = timestamp_difference / df['e2e_delay']
 
     # Plot histogram
     ax = axs[axnum]
     #ax.set_xlim(0, 25)  # Set x limits
-    ax.set_ylim(1e-4, 1)
+    ax.set_ylim(1e-5, 1)
     sns.ecdfplot(timestamp_difference, complementary=True, log_scale=(False, True), ax=ax, color='Blue')
     #ax.hist(timestamp_difference, bins=100, density=True, cumulative=-1, log=True, alpha=0.75, color='blue')
     ax.set_title("Link Delay")
@@ -198,44 +216,41 @@ if __name__ == "__main__":
     ax.set_xlabel("Delay [ms]")
     axnum = axnum+1
 
-    ################### Segmentation delay ###################
-    # "rlc.queue.segments.0.rlc.txpdu.timestamp" - "rlc.queue.timestamp"
-    # Extract timestamp columns as series
-    timestamp1 = df["rlc.queue.segments.last.rlc.txpdu.timestamp"]
-    timestamp2 = df["rlc.queue.segments.0.rlc.txpdu.timestamp"]
-
-    # Convert timestamps to milliseconds and calculate the difference
-    timestamp_difference = (timestamp1 - timestamp2) * 1000
-    df['segmentation_delay'] = timestamp_difference
-    df['segmentation_delay_perc'] = timestamp_difference / df['e2e_delay']
-
-    # Plot histogram
-    ax = axs[axnum]
-    #ax.set_xlim(0, 5)  # Set x limits
-    ax.set_ylim(1e-4, 1)
-    sns.ecdfplot(timestamp_difference, complementary=True, log_scale=(False, True), ax=ax, color='Blue')
-    #ax.hist(tx_timestamp_difference, bins=100, density=True, alpha=0.75, color='blue')
-    ax.set_title("Segmentation Delay")
-    ax.set_ylabel("CCDF")
-    ax.set_xlabel("Delay [ms]")
-    #ax.set_yscale('log')  # Set y-axis to log scale
-    axnum = axnum+1
-
     ################### Transmission delay ###################
-    # "rlc.queue.segments.0.rlc.txpdu.timestamp" - "rlc.queue.timestamp"
-    # Extract timestamp columns as series
-    timestamp1 = df["rlc.reassembled.0.mac.demuxed.mac.decoded.first.timestamp"]
-    timestamp2 = df["rlc.queue.segments.0.rlc.txpdu.timestamp"]
+
+    # Add a new column: longest_segment
+    def get_max_delay_segment_gnbind(row):
+        segment_delays = []
+        for i in range(row['rlc.reassembled.num_segments']+1):
+            ue_ind = row['rlc.reassembled.num_segments']-i
+            gnb_ind = i
+            timestamp1 = row[f"rlc.queue.segments.{ue_ind}.rlc.txpdu.timestamp"]
+            timestamp2 = row[f"rlc.reassembled.{gnb_ind}.mac.demuxed.mac.decoded.0.timestamp"]
+            segment_delays.append((timestamp2-timestamp1)*1000)
+        max_index = segment_delays.index(max(segment_delays))
+        return max_index
+    df['max_delay_segment_gnbind'] = df.apply(get_max_delay_segment_gnbind, axis=1)
+
+    # Add a new column: get longest_segment_tx_delay
+    def get_longest_segment_tx_delay(row):
+        ue_ind = row['rlc.reassembled.num_segments']-row['max_delay_segment_gnbind']
+        gnb_ind = row['max_delay_segment_gnbind']
+        timestamp1 = row[f"rlc.queue.segments.{ue_ind}.rlc.txpdu.timestamp"]
+        timestamp2 = row[f"rlc.reassembled.{gnb_ind}.mac.demuxed.mac.decoded.first.timestamp"]
+        return (timestamp2-timestamp1)*1000
+    df['longest_segment_tx_delay_ms'] = df.apply(get_longest_segment_tx_delay, axis=1)
 
     # Convert timestamps to milliseconds and calculate the difference
-    timestamp_difference = (timestamp1 - timestamp2) * 1000
+    timestamp_difference = df['longest_segment_tx_delay_ms']
     df['transmission_delay'] = timestamp_difference
+    # Remove rows where 'transmission_delay' is less than 0
+    df = df[df['transmission_delay'] >= 0]
     df['transmission_delay_perc'] = timestamp_difference / df['e2e_delay']
 
     # Plot histogram
     ax = axs[axnum]
     #ax.set_xlim(0, 5)  # Set x limits
-    ax.set_ylim(1e-4, 1)
+    ax.set_ylim(1e-5, 1)
     sns.ecdfplot(timestamp_difference, complementary=True, log_scale=(False, True), ax=ax, color='Blue')
     #ax.hist(tx_timestamp_difference, bins=100, density=True, alpha=0.75, color='blue')
     ax.set_title("Transmission Delay")
@@ -245,24 +260,66 @@ if __name__ == "__main__":
     axnum = axnum+1
 
     ################### Retransmissions delay ###################
-    # "rlc.queue.segments.0.rlc.txpdu.timestamp" - "rlc.queue.timestamp"
-    # Extract timestamp columns as series
-    timestamp1 = df["rlc.reassembled.0.mac.demuxed.timestamp"]
-    timestamp2 = df["rlc.reassembled.0.mac.demuxed.mac.decoded.first.timestamp"]
+
+    def get_longest_segment_retx_delay(row):
+        ind = row['max_delay_segment_gnbind']
+        timestamp1 = row[f"rlc.reassembled.{ind}.mac.demuxed.mac.decoded.first.timestamp"]
+        timestamp2 = row[f"rlc.reassembled.{ind}.mac.demuxed.mac.decoded.0.timestamp"]
+        return (timestamp2-timestamp1)*1000
+    df['longest_segment_retx_delay_ms'] = df.apply(get_longest_segment_retx_delay, axis=1)
+
+    # Add a new column: retransmission_delay
+    def calc_full_retransmission_delay(row):
+        sum_delay = 0.0
+        for seg in range(row['rlc.reassembled.num_segments']):
+            timestamp1 = row[f"rlc.reassembled.{seg}.mac.demuxed.mac.decoded.first.timestamp"]
+            timestamp2 = row[f"rlc.reassembled.{seg}.mac.demuxed.mac.decoded.0.timestamp"]
+            sum_delay += ((timestamp2 - timestamp1) * 1000)
+        return sum_delay
+    # Apply the function to filter rows
+    df["full_retransmission_delay"] = df.apply(calc_full_retransmission_delay, axis=1)
 
     # Convert timestamps to milliseconds and calculate the difference
-    timestamp_difference = (timestamp1 - timestamp2) * 1000
-    df['retransmission_delay'] = timestamp_difference
-    df['retransmission_delay_perc'] = timestamp_difference / df['e2e_delay']
+    timestamp_difference = df['longest_segment_retx_delay_ms']
+    df["retransmission_delay"] = timestamp_difference
+    df['retransmission_delay_perc'] = df['retransmission_delay'] / df['e2e_delay']
 
     # Plot histogram
     ax = axs[axnum]
     #ax.set_xlim(0, 30)  # Set x limits
-    ax.set_ylim(1e-4, 1)
+    ax.set_ylim(1e-5, 1)
     sns.ecdfplot(timestamp_difference, complementary=True, log_scale=(False, True), ax=ax, color='Blue')
     #ax.hist(timestamp_difference, bins=100, density=True, cumulative=-1, log=True, alpha=0.75, color='blue')
     ax.set_title("Retransmissions Delay")
     #ax.set_ylabel("Probability")
+    ax.set_ylabel("CCDF")
+    ax.set_xlabel("Delay [ms]")
+    #ax.set_yscale('log')  # Set y-axis to log scale
+    axnum = axnum+1
+
+
+    ################### Segmentation delay ###################
+    # "rlc.queue.segments.0.rlc.txpdu.timestamp" - "rlc.queue.timestamp"
+    # Extract timestamp columns as series
+    # timestamp1 = df["rlc.queue.segments.last.rlc.txpdu.timestamp"]
+    # timestamp2 = df["rlc.queue.segments.0.rlc.txpdu.timestamp"]
+    timestamp1 = df["rlc.reassembled.first.mac.demuxed.mac.decoded.first.timestamp"]
+    timestamp2 = df["rlc.reassembled.0.mac.demuxed.mac.decoded.first.timestamp"]
+
+    # Convert timestamps to milliseconds and calculate the difference
+    timestamp_difference = df['link_delay']-(df['longest_segment_retx_delay_ms']+df['longest_segment_tx_delay_ms'])
+    df['segmentation_delay'] = timestamp_difference
+    # Remove rows where 'transmission_delay' is less than 0
+    df = df[df['segmentation_delay'] >= 0]
+    df['segmentation_delay_perc'] = df['segmentation_delay'] / df['e2e_delay']
+
+    # Plot histogram
+    ax = axs[axnum]
+    #ax.set_xlim(0, 5)  # Set x limits
+    ax.set_ylim(1e-5, 1)
+    sns.ecdfplot(timestamp_difference, complementary=True, log_scale=(False, True), ax=ax, color='Blue')
+    #ax.hist(tx_timestamp_difference, bins=100, density=True, alpha=0.75, color='blue')
+    ax.set_title("Segmentation Delay")
     ax.set_ylabel("CCDF")
     ax.set_xlabel("Delay [ms]")
     #ax.set_yscale('log')  # Set y-axis to log scale
@@ -279,11 +336,11 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(1,1,figsize=(3,2))
     #ax.set_yscale('log')
     ax.set_ylim(1e-4, 1)
+    #ax.set_xlim([0, 23])
 
     markevery = 0.05
     markersize = 4
     linewidth = 1.5
-
 
     y_points_lim = [0,30,300]
     y_points = np.linspace(
@@ -334,10 +391,11 @@ if __name__ == "__main__":
 
     finite_indices = np.where(np.isfinite(dC))[0]
     largest_index = np.max(finite_indices)
-    ax.set_xlim([0,y_points[largest_index]])
+    #ax.set_xlim([0,y_points[largest_index]])
+    ax.set_xlim([0,14])
 
     ax.set_xlabel("Delay [ms]")
-    ax.set_ylabel("Portion")
+    ax.set_ylabel("Percentage")
     ax.legend(
         loc='lower left',
         labelcolor='black'
@@ -356,6 +414,7 @@ if __name__ == "__main__":
     ax2 = ax.twinx()
     ax2.set_ylabel("CCDF")
     ax2.set_yscale('log')
+    ax2.set_xlim([0, 23])
 
     emp_cdf, emp_pdf = calc_emp_prob(df,'e2e_delay',y_points,y_points_lim)
     ax2.plot(
@@ -371,6 +430,8 @@ if __name__ == "__main__":
         #mfc='none',
         label="E2E CCDF"
     )
+
+    ax.set_xlim([0,14.5])
 
     ax2.set_ylim([1e-5,1])
     
@@ -393,291 +454,3 @@ if __name__ == "__main__":
 
     # Save the figure to a file
     plt.savefig(Path(sys.argv[2])/'decompose5.png')
-
-    exit(0)
-
-    ###########################################################################################
-
-    fig, ax = plt.subplots(1,1,figsize=(3,2))
-    ax.set_yscale('log')
-    ax.set_ylim(1e-4, 1)
-
-    markevery = 0.05
-    markersize = 4
-    linewidth = 1.5
-
-
-    y_points_lim = [0,30,100]
-    y_points = np.linspace(
-        start=y_points_lim[0],
-        stop=y_points_lim[1],
-        num=y_points_lim[2],
-    )
-    emp_cdf, emp_pdf = calc_emp_prob(df,'e2e_delay',y_points,y_points_lim)
-    ax.plot(
-        y_points,
-        np.float64(1.00)-np.array(emp_cdf,dtype=np.float64),
-        color='#004c00',
-        linewidth=linewidth,
-        linestyle='-',
-        #markersize=markersize,
-        #markevery=markevery,
-        #marker='o',
-        #mfc='none',
-        label="End-to-end delay"
-    )
-
-    y_points_lim = [0,30,100]
-    y_points = np.linspace(
-        start=y_points_lim[0],
-        stop=y_points_lim[1],
-        num=y_points_lim[2],
-    )
-    emp_cdf, emp_pdf = calc_emp_prob(df,'link_delay',y_points,y_points_lim)
-    ax.plot(
-        y_points,
-        np.float64(1.00)-np.array(emp_cdf,dtype=np.float64),
-        color= '#003366',
-        linewidth=linewidth,
-        linestyle=':',
-        #markersize=markersize,
-        #markevery=markevery,
-        #marker='s',
-        #mfc='none',
-        label="Link delay",
-    )
-
-    y_points_lim = [0,3,100]
-    y_points = np.linspace(
-        start=y_points_lim[0],
-        stop=y_points_lim[1],
-        num=y_points_lim[2],
-    )
-    emp_cdf, emp_pdf = calc_emp_prob(df,'core_delay',y_points,y_points_lim)
-    ax.plot(
-        y_points,
-        np.float64(1.00)-np.array(emp_cdf,dtype=np.float64),
-        color='#8B0000',
-        linewidth=linewidth,
-        linestyle='--',
-        #markersize=markersize,
-        #markevery=markevery,
-        #marker='v',
-        #mfc='none',
-        label="Core delay"
-    )
-
-    y_points_lim = [0,10,100]
-    y_points = np.linspace(
-        start=y_points_lim[0],
-        stop=y_points_lim[1],
-        num=y_points_lim[2],
-    )
-    emp_cdf, emp_pdf = calc_emp_prob(df,'queuing_delay',y_points,y_points_lim)
-    ax.plot(
-        y_points,
-        np.float64(1.00)-np.array(emp_cdf,dtype=np.float64),
-        color='#333333',
-        linewidth=linewidth,
-        linestyle='-.',
-        #markersize=markersize,
-        #markevery=markevery,
-        #marker='x',
-        #mfc='none',
-        label="Queuing delay"
-    )
-
-    ax.set_xlabel("Delay [ms]")
-    ax.set_ylabel("CCDF")
-    ax.grid(visible=True)
-    ax.legend()
-
-    plt.legend(loc='upper right')
-
-    # Adjust layout
-    plt.tight_layout()
-
-    # Save the figure to a file
-    plt.savefig(Path(sys.argv[2])/'decompose2.png')
-
-
-    ########################################################################################################
-
-    fig, ax = plt.subplots(1,1,figsize=(3,2))
-    ax.set_yscale('log')
-    ax.set_ylim(1e-4, 1)
-
-    markevery = 0.05
-    markersize = 4
-    linewidth = 1.5
-
-    y_points_lim = [0,30,100]
-    y_points = np.linspace(
-        start=y_points_lim[0],
-        stop=y_points_lim[1],
-        num=y_points_lim[2],
-    )
-    emp_cdf, emp_pdf = calc_emp_prob(df,'link_delay',y_points,y_points_lim)
-    ax.plot(
-        y_points,
-        np.float64(1.00)-np.array(emp_cdf,dtype=np.float64),
-        color='#333333',
-        linewidth=linewidth,
-        linestyle='-.',
-        #markersize=markersize,
-        #markevery=markevery,
-        #marker='x',
-        #mfc='none',
-        label="Link delay"
-    )
-
-
-    y_points_lim = [0,10,100]
-    y_points = np.linspace(
-        start=y_points_lim[0],
-        stop=y_points_lim[1],
-        num=y_points_lim[2],
-    )
-    emp_cdf, emp_pdf = calc_emp_prob(df,'segmentation_delay',y_points,y_points_lim)
-    ax.plot(
-        y_points,
-        np.float64(1.00)-np.array(emp_cdf,dtype=np.float64),
-        color='#004c00',
-        linewidth=linewidth,
-        linestyle='-',
-        #markersize=markersize,
-        #markevery=markevery,
-        #marker='o',
-        #mfc='none',
-        label="Segmentation delay"
-    )
-
-    y_points_lim = [0,10,100]
-    y_points = np.linspace(
-        start=y_points_lim[0],
-        stop=y_points_lim[1],
-        num=y_points_lim[2],
-    )
-    emp_cdf, emp_pdf = calc_emp_prob(df,'transmission_delay',y_points,y_points_lim)
-    ax.plot(
-        y_points,
-        np.float64(1.00)-np.array(emp_cdf,dtype=np.float64),
-        color= '#003366',
-        linewidth=linewidth,
-        linestyle=':',
-        #markersize=markersize,
-        #markevery=markevery,
-        #marker='s',
-        #mfc='none',
-        label="Transmission delay",
-    )
-
-    y_points_lim = [0,30,100]
-    y_points = np.linspace(
-        start=y_points_lim[0],
-        stop=y_points_lim[1],
-        num=y_points_lim[2],
-    )
-    emp_cdf, emp_pdf = calc_emp_prob(df,'retransmission_delay',y_points,y_points_lim)
-    ax.plot(
-        y_points,
-        np.float64(1.00)-np.array(emp_cdf,dtype=np.float64),
-        color='#8B0000',
-        linewidth=linewidth,
-        linestyle='--',
-        #markersize=markersize,
-        #markevery=markevery,
-        #marker='v',
-        #mfc='none',
-        label="Retransmission delay"
-    )
-
-    ax.set_xlabel("Delay [ms]")
-    ax.set_ylabel("CCDF")
-    ax.grid(visible=True)
-    ax.legend()
-
-    plt.legend(loc='upper right')
-
-    # Adjust layout
-    plt.tight_layout()
-
-    # Save the figure to a file
-    plt.savefig(Path(sys.argv[2])/'decompose3.png')
-
-
-    ########################################################################################################
-    # List of 'y' values
-    y_values = np.linspace(5,15,100)
-
-    fig, ax = plt.subplots(1,1,figsize=(3,2))
-
-    percentage_column_names = ["retransmission_delay_perc", "transmission_delay_perc", 
-                            "segmentation_delay_perc", "queuing_delay_perc", "core_delay_perc"]
-
-    # Create a new DataFrame to store the normalized values
-    normalized_df = pd.DataFrame(index=y_values, columns=percentage_column_names)
-
-    #dark_palette = ["#004c00", "#8B0000", "#003366", "#333333", "#800080"]
-
-    # Calculate the normalized values for each 'y' value
-    for y in y_values:
-        df_filtered = df[df['e2e_delay'] > y]
-        total_values = df_filtered[percentage_column_names].sum(axis=1)
-        
-        # Normalize the values so that the sum is equal to one
-        normalized_values = df_filtered[percentage_column_names].div(total_values, axis=0)
-        
-        normalized_df.loc[y] = normalized_values.mean()
-
-    # Plot the results
-    ax = normalized_df.plot(kind='bar', colormap='viridis', alpha=0.8, stacked=True, width=1,ax=ax)
-    
-    # add hatch
-    #ax.containers[:4]
-    #bars = [thing for thing in ax.containers if isinstance(thing,mpl.container.BarContainer)]
-    #import itertools
-    #patterns = itertools.cycle(('||', 'x', '\\', '..', 'O'))
-    #d = {}
-    #for bar in bars:
-    #    for patch in bar:
-    #        pat = d.setdefault(patch.get_facecolor(), next(patterns))
-    #        patch.set_hatch(pat)
-    #L = ax.legend()
-
-    # Get x-axis ticks and labels
-    x_ticks = ax.get_xticks()
-    x_labels = [label.get_text() for label in ax.get_xticklabels()]
-
-    req_x_ticks = np.linspace(5,15,11) #list(range(16))
-    float_numbers = [float(num_str) for num_str in x_labels]
-    new_x_ticks = []
-    new_x_labels = []
-    for req_x_tick in req_x_ticks:
-        differences = [abs(req_x_tick - float_num) for float_num in float_numbers]
-        closest_index = differences.index(min(differences))
-        new_x_ticks.append(x_ticks[closest_index])
-        new_x_labels.append(str(req_x_tick))
-
-    # Set new x-axis ticks and labels
-    ax.set_xticks(new_x_ticks)
-    ax.set_xticklabels(new_x_labels, rotation=0)
-
-    # Customize plot attributes
-    plt.xlabel('Delay target [ms]')
-    ax.set_ylim(0,1)
-    plt.ylabel('Portion')
-    ax.legend(
-        labels=['Retransmission delay', 'Transmission delay', 'Segmentation delay', 'Queuing delay', 'Core delay'],facecolor="white", 
-        frameon = True,
-        loc='upper left'
-    )
-
-    # Adjust layout
-    plt.tight_layout()
-
-    # Save the figure to a file
-    plt.savefig(Path(sys.argv[2])/'decompose4.png')
-
-
-###############################################################

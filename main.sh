@@ -48,7 +48,7 @@ ue_file=$(copy_lseq_file "192.168.1.1" "wlab" "wlab" "${results_folder}/ue")
 echo "Copied ue file: $ue_file"
 
 # Copy the latest *.json file from UPF (192.168.2.3) to the UPF folder
-upf_file=$(copy_json_file "192.168.2.3" "wlab" "wlab" "synctest/fingolfin" "${results_folder}/upf")
+upf_file=$(copy_json_file "192.168.2.3" "wlab" "wlab" "m1/fingolfin" "${results_folder}/upf")
 echo "Copied UPF file: $upf_file"
 
 
@@ -65,6 +65,6 @@ python ul_combine.py "$results_folder/gnb/gnbjourneys.json" "$results_folder/ue/
 echo "Created journeys.parquet"
 
 # Process and decompose latency
-python ul_decompose_plot.py "$results_folder/journeys.parquet" "$results_folder"
-python ul_time_plot.py "$results_folder/journeys.parquet" "$results_folder"
+python ul_decompose_plot_v2.py "$results_folder/journeys.parquet" "$results_folder"
+python ul_time_plot_v2.py "$results_folder/journeys.parquet" "$results_folder"
 echo "Created plots"
