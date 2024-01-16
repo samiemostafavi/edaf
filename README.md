@@ -1,4 +1,5 @@
-# latseq-pp
+# EDAF: An End-to-End Delay Analytics Framework for 5G-and-Beyond Networks
+
 Python package to post process Latseq measurements from Openairinterface5G
 
 Create a folder and name it using the `*_results` format. Place the openairinterface's `*.lseq` and irtt's `*.json` files in it.
@@ -30,3 +31,7 @@ The results folder in the examples below is named `6_results`.
     python ul_decompose_plot.py 6_results/journeys.parquet 6_results
     python ul_time_plot.py 6_results/journeys.parquet 6_results
     ```
+
+## License
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this project except in compliance with the License. A copy of the license is included in the [LICENSE](LICENSE) file.
