@@ -1,0 +1,5 @@
+numpy
+loguru
+pandas
+matplotlib
+asyncio
