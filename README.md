@@ -15,7 +15,7 @@ For running EDAF experiments, 3 hosts and 2 USRP SDRs are required to bring up a
 2. gNB host and SDR
 3. UE host and SDR
 
-All hosts need to be connected via a secondary out-of-band wired IP network that we call EDAF network.
+All hosts need to be connected via a secondary out-of-band wired IP network that we call it edaf-net.
 
 Also, their clocks must be synced by running Precision Time Protocol (PTP) clock synchronization.
 Therefore all hosts are supposed to be equipped with hardware timestamping capable network interface cards (NICs) which is required for PTP to sync the clocks.
@@ -30,25 +30,37 @@ We start by running the 5G core services on CN host by following OpenAirInterfac
 Next, we need to run NLMT server inside the `UPF` or `SPGWU` container.
 In order to do that, we download the applications binary and run it using these commands:
 ```
-docker exec -it 5gcn-spgwu sh -c "apt-get install wget -y"
-docker exec -it 5gcn-spgwu wget https://raw.githubusercontent.com/samiemostafavi/nlmt/master/nlmt
-docker exec -it 5gcn-spgwu sh -c "cp nlmt /usr/local/bin/"
-docker exec -d 5gcn-spgwu /bin/sh -c 'while true; do nlmt server -n 192.168.2.2:50009 -i 0 -d 0 -l 0; sleep 1; done'
+wget https://raw.githubusercontent.com/samiemostafavi/nlmt/master/nlmt
+docker cp nlmt 5gcn-spgwu:/usr/local/bin/
+docker exec -it 5gcn-spgwu chmod +x /usr/local/bin/nlmt
+docker exec -d 5gcn-spgwu /bin/sh -c 'while true; do nlmt server -n 172.16.32.140:50009 -i 0 -d 0 -l 0; sleep 1; done'
 ```
-
 
 ### 2) Run EDAF Server
 
 Run EDAF on the CN host by first creating a folder on the host for storing the database.
 
-Run EDAF server using the following command (create `influxdbv2` folder on the CN host beforehand):
+Use the following command after creating `influxdbv2` folder on the CN host:
 ```
-docker run -d --rm --volume `pwd`/influxdbv2:/root/.influxdbv2 -p 8086:8086 -p 50009:50009 -p 50015:50015 -p 50011:50011 --name edaf samiemostafavi/edaf:latest
+docker run -d --rm --volume `pwd`/influxdbv2:/root/.influxdbv2 --network oai-5gcn-net --ip 172.16.32.140  --name edaf samiemostafavi/edaf:latest
+docker network connect edaf-net --ip 192.168.32.140 edaf
 ```
-Check influxdb on the browser: `http://localhost:8086`
+Check influxdb UI on the browser: `http://192.168.32.140:8086`
 
 
-Run the modified OAI 5G network on gNB and UE hosts.
+### 3) Run 5G RAN
+
+To run the modified gNodeB, in the config file e.g. `gnb.sa.band78.fr1.106PRB.usrpb210.conf` you need to add EDAF server address as:
+```
+latseq_addr = "192.168.32.140:50015";
+``` 
+Then run gNodeB and check EDAF logs whether it is connected or not.
+
+For UE, when in the arguments passing to the execution command, you have to pass EDAF address as:
+```
+--latseq-addr 192.168.32.140:50011
+```
+Then run UE and check EDAF logs whether it is connected or not.
 
 Upon successful connection between gNB and UE, run the traffic generator NLMT client on UE host to generate packets on uplink.
 

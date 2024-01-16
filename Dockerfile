@@ -1,14 +1,23 @@
+# docker build -t samiemostafavi/edaf .
+# docker image push samiemostafavi/edaf
+
 # requirements
 FROM ubuntu:20.04 AS base
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ="Europe/Stockholm"
 
+
 RUN apt-get update &&\
     apt-get upgrade -y
+
+RUN apt-get install software-properties-common -y
+RUN add-apt-repository ppa:deadsnakes/ppa
+RUN apt-get update
+RUN apt-get install python3.9 python3.9-dev python3-pip -y
+
 RUN apt-get install -y \
-    build-essential wget curl tar \
-    python3.8 python3.8-dev python3-pip
+    build-essential wget curl tar
 
 RUN mkdir -p /tmp/install
 WORKDIR /tmp/install
@@ -29,8 +38,8 @@ WORKDIR /
 # install edaf
 COPY . /EDAF
 WORKDIR /EDAF
-RUN pip3 install -U .
+RUN python3.9 -m pip install -U .
 
 RUN chmod +x entrypoint.sh
 ENTRYPOINT ["./entrypoint.sh"]
-CMD ["python3","edaf.py"]
+CMD ["python3.9","edaf.py"]

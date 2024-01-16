@@ -111,7 +111,7 @@ def process_ul_journeys(df):
     # find num_segments
     df['rlc.reassembled.num_segments'] = df.apply(get_num_segments, axis=1)
     # find first_hqround_rx_ts
-    df['rlc.reassembled.0.mac.demuxed.mac.decoded.first.timestamp'] = df.apply(get_first_hqround_rx_ts, axis=1)
+    #df['rlc.reassembled.0.mac.demuxed.mac.decoded.first.timestamp'] = df.apply(get_first_hqround_rx_ts, axis=1)
     # find last_segment_txpdu_ts
     df['rlc.queue.segments.last.rlc.txpdu.timestamp'] = df.apply(get_last_segment_txpdu_ts, axis=1)
     # find first_hqround_rx_ts

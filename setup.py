@@ -48,6 +48,6 @@ setuptools.setup(
     entry_points={
         'console_scripts': ['edaf=edaf.api.server:serve'],
     },
-    python_requires='>=3.8',
+    python_requires='>=3.9',
     license='Apache v2'
 )
