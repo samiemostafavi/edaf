@@ -1,0 +1,36 @@
+# requirements
+FROM ubuntu:20.04 AS base
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV TZ="Europe/Stockholm"
+
+RUN apt-get update &&\
+    apt-get upgrade -y
+RUN apt-get install -y \
+    build-essential wget curl tar \
+    python3.8 python3.8-dev python3-pip
+
+RUN mkdir -p /tmp/install
+WORKDIR /tmp/install
+
+# install influxdb
+RUN curl -O https://dl.influxdata.com/influxdb/releases/influxdb2-2.7.4_linux_amd64.tar.gz
+RUN tar xvzf ./influxdb2-2.7.4_linux_amd64.tar.gz
+RUN cp ./influxdb2-2.7.4/usr/bin/influxd /usr/local/bin/
+
+# install influx CLI
+RUN wget https://dl.influxdata.com/influxdb/releases/influxdb2-client-2.7.3-linux-amd64.tar.gz
+RUN tar xvzf ./influxdb2-client-2.7.3-linux-amd64.tar.gz
+RUN cp ./influx /usr/local/bin/
+
+RUN rm -rf /tmp/install
+WORKDIR /
+
+# install edaf
+COPY . /EDAF
+WORKDIR /EDAF
+RUN pip3 install -U .
+
+RUN chmod +x entrypoint.sh
+ENTRYPOINT ["./entrypoint.sh"]
+CMD ["python3","edaf.py"]

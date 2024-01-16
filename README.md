@@ -9,6 +9,7 @@ To achieve that, EDAF
  4) generates insights for delay optimization.
 
 ## Requirements and preparations
+
 For running EDAF experiments, 3 hosts and 2 USRP SDRs are required to bring up an standalone OpenAirInterface (OAI) 5G network:
 1. Core Network (CN) host
 2. gNB host and SDR
@@ -23,7 +24,29 @@ Make sure Docker is installed on the hosts.
 
 ## Running an experiment
 
-Run EDAF and 5G core network on the CN host.
+### 1) Run 5G Core and NLMT Server
+
+We start by running the 5G core services on CN host by following OpenAirInterface tutorials.
+Next, we need to run NLMT server inside the `UPF` or `SPGWU` container.
+In order to do that, we download the applications binary and run it using these commands:
+```
+docker exec -it 5gcn-spgwu sh -c "apt-get install wget -y"
+docker exec -it 5gcn-spgwu wget https://raw.githubusercontent.com/samiemostafavi/nlmt/master/nlmt
+docker exec -it 5gcn-spgwu sh -c "cp nlmt /usr/local/bin/"
+docker exec -d 5gcn-spgwu /bin/sh -c 'while true; do nlmt server -n 192.168.2.2:50009 -i 0 -d 0 -l 0; sleep 1; done'
+```
+
+
+### 2) Run EDAF Server
+
+Run EDAF on the CN host by first creating a folder on the host for storing the database.
+
+Run EDAF server using the following command (create `influxdbv2` folder on the CN host beforehand):
+```
+docker run -d --rm --volume `pwd`/influxdbv2:/root/.influxdbv2 -p 8086:8086 -p 50009:50009 -p 50015:50015 -p 50011:50011 --name edaf samiemostafavi/edaf:latest
+```
+Check influxdb on the browser: `http://localhost:8086`
+
 
 Run the modified OAI 5G network on gNB and UE hosts.
 
