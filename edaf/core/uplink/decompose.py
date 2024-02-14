@@ -70,40 +70,31 @@ def get_tdd_ts_offset_ms(row):
     return tdd_offset_ms
 
 # Add a new column: find the longest segment service delay (tx + retx), save its gnb index
-def get_max_delay_segment_gnbind(row):
-    segment_delays = []
+def get_max_service_delay_segment_gnb_idx(row):
+    segments_service_delays = []
     for i in range(row['rlc.reassembled.num_segments']+1):
         ue_ind = row['rlc.reassembled.num_segments']-i
         gnb_ind = i
         timestamp1 = row[f"rlc.queue.segments.{ue_ind}.rlc.txpdu.timestamp"]
         timestamp2 = row[f"rlc.reassembled.{gnb_ind}.mac.demuxed.mac.decoded.0.timestamp"]
-        segment_delays.append((timestamp2-timestamp1)*1000)
+        segments_service_delays.append((timestamp2-timestamp1)*1000)
 
-    max_index = segment_delays.index(max(segment_delays))
+    max_index = segments_service_delays.index(max(segments_service_delays))
     return max_index
 
 # Add a new column: get longest_segment_tx_delay
-def get_longest_segment_tx_delay(row):
-    ue_ind = row['rlc.reassembled.num_segments']-row['max_delay_segment_gnbind']
-    gnb_ind = row['max_delay_segment_gnbind']
+def get_max_service_delay_segment_tx_delay(row):
+    ue_ind = row['rlc.reassembled.num_segments']-row['max_service_delay_segment_gnb_idx']
+    gnb_ind = row['max_service_delay_segment_gnb_idx']
     timestamp1 = row[f"rlc.queue.segments.{ue_ind}.rlc.txpdu.timestamp"]
     timestamp2 = row[f"rlc.reassembled.{gnb_ind}.mac.demuxed.mac.decoded.first.timestamp"]
     return (timestamp2-timestamp1)*1000
 
-def get_longest_segment_retx_delay(row):
-    ind = row['max_delay_segment_gnbind']
-    timestamp1 = row[f"rlc.reassembled.{ind}.mac.demuxed.mac.decoded.first.timestamp"]
-    timestamp2 = row[f"rlc.reassembled.{ind}.mac.demuxed.mac.decoded.0.timestamp"]
+def get_max_service_delay_segment_retx_delay(row):
+    idx = row['max_service_delay_segment_gnb_idx']
+    timestamp1 = row[f"rlc.reassembled.{idx}.mac.demuxed.mac.decoded.first.timestamp"]
+    timestamp2 = row[f"rlc.reassembled.{idx}.mac.demuxed.mac.decoded.0.timestamp"]
     return (timestamp2-timestamp1)*1000
-
-# Add a new column: retransmission_delay
-def calc_full_retransmission_delay(row):
-    sum_delay = 0.0
-    for seg in range(row['rlc.reassembled.num_segments']):
-        timestamp1 = row[f"rlc.reassembled.{seg}.mac.demuxed.mac.decoded.first.timestamp"]
-        timestamp2 = row[f"rlc.reassembled.{seg}.mac.demuxed.mac.decoded.0.timestamp"]
-        sum_delay += ((timestamp2 - timestamp1) * 1000)
-    return sum_delay
 
 def myfloor(inp_arr):
     out_arr = []
@@ -119,26 +110,23 @@ def process_ul_journeys(df, ignore_core=False):
         return df
 
     ################### POST PROCESS ###################
-    # find num_segments
+    # find the number of segments for each packet
     df['rlc.reassembled.num_segments'] = df.apply(get_num_segments, axis=1)
 
-    # find last_segment_txpdu_ts
+    # find the last segment's service time
     df['rlc.queue.segments.last.rlc.txpdu.timestamp'] = df.apply(get_last_segment_txpdu_ts, axis=1)
 
-    # find first_hqround_rx_ts
+    # find first harq attempt decode time of all segments
     for seg in range(MAX_SEGMENTS):
         if f'rlc.reassembled.{seg}.mac.demuxed.mac.decoded.0.timestamp' in df:
             df[f'rlc.reassembled.{seg}.mac.demuxed.mac.decoded.first.timestamp'] = df.apply(get_first_hqround_rx_ts, args=(seg,), axis=1)
 
+    # find first harq attempt decode time of the first segment
     df['rlc.reassembled.first.mac.demuxed.mac.decoded.first.timestamp'] = df.apply(get_first_hqround_rx_ts, args=(-1,), axis=1)
 
-    # find rlc.reassembled.first
+    # find first segment's complete reassembly time
     df["rlc.reassembled.first.mac.demuxed.mac.decoded.0.timestamp"] = df.apply(get_first_segment_reassembly_ts, axis=1)
 
-    # find last_segment_txpdu_ts
-    df['rlc.queue.segments.last.rlc.txpdu.timestamp'] = df.apply(get_last_segment_txpdu_ts, axis=1)
-
-    #print(len(df))
     ################### End to End Delay ###################
     # "rlc.queue.segments.0.rlc.txpdu.timestamp" - "rlc.queue.timestamp"
     # Extract timestamp columns as series
@@ -205,16 +193,11 @@ def process_ul_journeys(df, ignore_core=False):
     #print(len(df))
 
     ################### Transmission delay ###################
+    # find the segment with longest tx+retx (service) delay, then store its gnb index
+    df['max_service_delay_segment_gnb_idx'] = df.apply(get_max_service_delay_segment_gnb_idx, axis=1)
 
-    # find the longest segment, store its gnb index
-    df['max_delay_segment_gnbind'] = df.apply(get_max_delay_segment_gnbind, axis=1)
-
-    # find longest segment tx delay
-    df['longest_segment_tx_delay_ms'] = df.apply(get_longest_segment_tx_delay, axis=1)
-
-    # Convert timestamps to milliseconds and calculate the difference
-    timestamp_difference = df['longest_segment_tx_delay_ms']
-    df['transmission_delay'] = timestamp_difference
+    # save the tx delay of the previously discovered segment as the transmission delay
+    df['transmission_delay'] = df.apply(get_max_service_delay_segment_tx_delay, axis=1)
 
     # Remove rows where 'transmission_delay' is less than 0
     df = df[df['transmission_delay'] >= 0]
@@ -222,29 +205,14 @@ def process_ul_journeys(df, ignore_core=False):
     #print(len(df))
 
     ################### Retransmissions delay ###################
-
-    # find longest segment retx delay
-    df['longest_segment_retx_delay_ms'] = df.apply(get_longest_segment_retx_delay, axis=1)
-
-    # find retx delay
-    df["full_retransmission_delay"] = df.apply(calc_full_retransmission_delay, axis=1)
-
-    # Convert timestamps to milliseconds and calculate the difference
-    timestamp_difference = df['longest_segment_retx_delay_ms']
-    df["retransmission_delay"] = timestamp_difference
+    # save the retx delay of the previously discovered segment as the retransmission delay
+    df['retransmission_delay'] = df.apply(get_max_service_delay_segment_retx_delay, axis=1)
     df = df[df['retransmission_delay'] >= 0]
     df['retransmission_delay_perc'] = df['retransmission_delay'] / df['e2e_delay']
     #print(len(df))
 
     ################### Segmentation delay ###################
-    timestamp1 = df["rlc.reassembled.first.mac.demuxed.mac.decoded.first.timestamp"]
-    timestamp2 = df["rlc.reassembled.0.mac.demuxed.mac.decoded.first.timestamp"]
-
-    # Convert timestamps to milliseconds and calculate the difference
-    timestamp_difference = df['link_delay']-(df['longest_segment_retx_delay_ms']+df['longest_segment_tx_delay_ms'])
-    df['segmentation_delay'] = timestamp_difference
-
-    # Remove rows where 'segmentation_delay' is less than 0
+    df['segmentation_delay'] = df['link_delay']-(df['transmission_delay']+df['retransmission_delay'])
     df = df[df['segmentation_delay'] >= 0]
     df['segmentation_delay_perc'] = df['segmentation_delay'] / df['e2e_delay']
     #print(len(df))
@@ -263,16 +231,17 @@ def process_ul_journeys(df, ignore_core=False):
     ################### Radio Arrival Time ###################
 
     timestamp_str = 'ip.in.timestamp'
+    new_timestamp_str = 'ip.in.timestamp_no_offset'
 
     # Add the tdd sync offset to all timestamps
-    df[timestamp_str] = df[timestamp_str] + (df['tdd_ts_offset_ms']/1000.0)
+    df[new_timestamp_str] = df[timestamp_str] + (df['tdd_ts_offset_ms']/1000.0)
 
     # Calculate frame number
-    tx_tss_fn = np.floor(df[timestamp_str] * 100)
+    tx_tss_fn = np.floor(df[new_timestamp_str] * 100)
     df['arrival_ref_time'] = tx_tss_fn*10
 
     # Calculate ms offset within the frame
-    tx_tss_ms = list((df[timestamp_str] * 1000) - (tx_tss_fn*10))
+    tx_tss_ms = list((df[new_timestamp_str] * 1000) - (tx_tss_fn*10))
     df['radio_arrival_time_os'] = tx_tss_ms
 
     # filter arrival times
@@ -281,75 +250,45 @@ def process_ul_journeys(df, ignore_core=False):
 
     ################### Service Time ###################
 
-    timestamp_str = 'rlc.queue.segments.0.rlc.txpdu.timestamp'
-    # Add the tdd sync offset to all timestamps        
-    df[timestamp_str] = df[timestamp_str] + (df['tdd_ts_offset_ms']/1000.0)
-    # Calculate frame number
-    tx_tss_fn = np.floor(df[timestamp_str] * 100)
-    # Calculate ms offset within the frame
-    tx_tss_ms = list( (df[timestamp_str] * 1000) - (tx_tss_fn*10) )
-    df['service_time_os'] = tx_tss_ms
-    df['service_time'] = (df[timestamp_str] * 1000) - df['arrival_ref_time']
+    for seg in range(MAX_SEGMENTS):
+        timestamp_str = f'rlc.queue.segments.{seg}.rlc.txpdu.timestamp'
+        new_timestamp_str = f'rlc.queue.segments.{seg}.rlc.txpdu.timestamp_no_offset'
+        if timestamp_str in df:
+            # Add the tdd sync offset to all timestamps        
+            df[new_timestamp_str] = df[timestamp_str] + (df['tdd_ts_offset_ms']/1000.0)
+            # Calculate frame number
+            tx_tss_fn = myfloor(df[new_timestamp_str] * 100)
+            # Calculate ms offset within the frame
+            tx_tss_ms = list( (df[new_timestamp_str] * 1000) - (tx_tss_fn*10) )
+            if seg == 0:
+                df['service_time_os'] = tx_tss_ms
+                df['service_time'] = (df[new_timestamp_str] * 1000) - df['arrival_ref_time']
+            else:
+                df[f'service_time_seg{seg}_os'] = tx_tss_ms
+                df[f'service_time_seg{seg}'] = (df[timestamp_str] * 1000.0) - df['arrival_ref_time']
 
-    timestamp_str = 'rlc.queue.segments.1.rlc.txpdu.timestamp'
-    if timestamp_str in df:
-        # Add the tdd sync offset to all timestamps        
-        df[timestamp_str] = df[timestamp_str] + (df['tdd_ts_offset_ms']/1000.0)
-        # Calculate frame number
-        tx_tss_fn = myfloor(df[timestamp_str] * 100.0)
-        # Calculate ms offset within the frame
-        tx_tss_ms = list( (df[timestamp_str] * 1000.0) - (tx_tss_fn*10.0) )
-        df['service_time_seg2_os'] = tx_tss_ms
-        df['service_time_seg2'] = (df[timestamp_str] * 1000.0) - df['arrival_ref_time']
-
-    timestamp_str = 'rlc.queue.segments.2.rlc.txpdu.timestamp'
-    if timestamp_str in df:
-        # Add the tdd sync offset to all timestamps        
-        df[timestamp_str] = df[timestamp_str] + (df['tdd_ts_offset_ms']/1000.0)
-        # Calculate frame number
-        tx_tss_fn = myfloor(df[timestamp_str] * 100.0)
-        # Calculate ms offset within the frame
-        tx_tss_ms = list( (df[timestamp_str] * 1000.0) - (tx_tss_fn*10.0) )
-        df['service_time_seg3_os'] = tx_tss_ms
-        df['service_time_seg3'] = (df[timestamp_str] * 1000.0) - df['arrival_ref_time']
-
-    timestamp_str = 'rlc.queue.segments.3.rlc.txpdu.timestamp'
-    if timestamp_str in df:
-        # Add the tdd sync offset to all timestamps        
-        df[timestamp_str] = df[timestamp_str] + (df['tdd_ts_offset_ms']/1000.0)
-        # Calculate frame number
-        tx_tss_fn = myfloor(df[timestamp_str] * 100.0)
-        # Calculate ms offset within the frame
-        tx_tss_ms = list( (df[timestamp_str] * 1000.0) - (tx_tss_fn*10.0) )
-        df['service_time_seg4_os'] = tx_tss_ms
-        df['service_time_seg4'] = (df[timestamp_str] * 1000.0) - df['arrival_ref_time']
 
     ################### Radio Departure Time ###################
-
     timestamp_str = 'rlc.reassembled.0.mac.demuxed.timestamp'
-
+    new_timestamp_str = 'rlc.reassembled.0.mac.demuxed.timestamp_no_offset'
     # Add the tdd sync offset to all timestamps
-    df[timestamp_str] = df[timestamp_str] + (df['tdd_ts_offset_ms']/1000.0)
-
+    df[new_timestamp_str] = df[timestamp_str] + (df['tdd_ts_offset_ms']/1000.0)
     # Calculate frame number
-    tx_tss_fn = np.floor(df[timestamp_str] * 100)
-
+    tx_tss_fn = np.floor(df[new_timestamp_str] * 100)
     # Calculate ms offset within the frame
-    tx_tss_ms = list( (df[timestamp_str] * 1000) - (tx_tss_fn*10) )
-
+    tx_tss_ms = list( (df[new_timestamp_str] * 1000) - (tx_tss_fn*10) )
     df['radio_departure_time_os'] = tx_tss_ms
-    df['radio_departure_time'] = (df[timestamp_str] * 1000) - df['arrival_ref_time']
-
+    df['radio_departure_time'] = (df[new_timestamp_str] * 1000) - df['arrival_ref_time']
 
     ################### Core Departure Time ###################
     timestamp_str = 'receive.timestamp'
-
+    timestamp_str_str = 'receive.timestamp_no_offset'
     # Add the tdd sync offset to all timestamps
-    df[timestamp_str] = df[timestamp_str] + (df['tdd_ts_offset_ms']/1000.0)
+    df[timestamp_str_str] = df[timestamp_str] + (df['tdd_ts_offset_ms']/1000.0)
     # Calculate frame number
-    tx_tss_fn = np.floor(df[timestamp_str] * 100)
+    tx_tss_fn = np.floor(df[timestamp_str_str] * 100)
     # Calculate ms offset within the frame
-    tx_tss_ms = list( (df[timestamp_str] * 1000) - (tx_tss_fn*10) )
-    df['core_departure_time'] = (df[timestamp_str] * 1000) - df['arrival_ref_time']
+    tx_tss_ms = list( (df[timestamp_str_str] * 1000) - (tx_tss_fn*10) )
+    df['core_departure_time'] = (df[timestamp_str_str] * 1000) - df['arrival_ref_time']
 
     return df
