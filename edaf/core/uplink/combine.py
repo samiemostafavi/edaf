@@ -4,11 +4,11 @@ from loguru import logger
 from collections import OrderedDict
 import sys
 
-logger.remove()
-logger.add(sys.stderr, level="INFO")
+#logger.remove()
+#logger.add(sys.stderr, level="INFO")
 
-IRTT_TIME_MARGIN = 0.0010 # 1ms
-MAX_DEPTH = 500
+TS_TIME_MARGIN = 0.0010 # 1ms
+DEFAULT_MAX_DEPTH = 500
 
 class FixSizeOrderedDict(OrderedDict):
     def __init__(self, *args, max=0, **kwargs):
@@ -43,15 +43,15 @@ def closest_nlmt_entry_uplink(ue_timestamp, nlmt_dict):
     for seqno in nlmt_dict:
         entry = nlmt_dict[seqno]
         send_timestamp = entry['send.timestamp']
-        if abs(ue_timestamp-send_timestamp) < IRTT_TIME_MARGIN:
+        if abs(ue_timestamp-send_timestamp) < TS_TIME_MARGIN:
             return seqno,entry
     return None,None
 
 class CombineUL:
-    def __init__(self):
-        self.gnbjourneys_dict = FixSizeOrderedDict(max=MAX_DEPTH)
-        self.uejourneys_dict = FixSizeOrderedDict(max=MAX_DEPTH)
-        self.nlmtjourneys_dict = FixSizeOrderedDict(max=MAX_DEPTH)
+    def __init__(self, max_depth=DEFAULT_MAX_DEPTH):
+        self.gnbjourneys_dict = FixSizeOrderedDict(max=max_depth)
+        self.uejourneys_dict = FixSizeOrderedDict(max=max_depth)
+        self.nlmtjourneys_dict = FixSizeOrderedDict(max=max_depth)
 
     def run(self,upfjourneys_data, gnbjourneys_data, uejourneys_data):
 
@@ -68,11 +68,33 @@ class CombineUL:
                 pass
 
         for entry in upfjourneys_data:
+            # online data
             if 'st' in list(entry.keys()):
                 self.nlmtjourneys_dict[entry['seq']] = {
+                    'seqno': entry['seq'],
                     'send.timestamp': np.float64(entry['st'])/1.0e9, 
                     'receive.timestamp': np.float64(entry['rt'])/1.0e9,
                 }
+            elif 'seqno' in list(entry.keys()):
+                # data read from json file
+                if 'wall' in list(entry['timestamps']['client']['send'].keys()):
+                    if 'wall' in list(entry['timestamps']['server']['receive'].keys()):
+                        self.nlmtjourneys_dict[entry['seqno']] = {
+                            'seqno': entry['seqno'],
+                            'send.timestamp': np.float64(entry['timestamps']['client']['send']['wall'])/1.0e9, 
+                            'receive.timestamp': np.float64(entry['timestamps']['server']['receive']['wall'])/1.0e9,
+                        }
+            else:
+                return None
+
+        logger.debug('---------------------')
+        logger.debug('gnb:')
+        logger.debug([item for item in self.gnbjourneys_dict.items()])
+        logger.debug('ue:')
+        logger.debug([item for item in self.uejourneys_dict.items()])
+        logger.debug('nlmt:')
+        logger.debug([item for item in self.nlmtjourneys_dict.items()])
+        logger.debug('---------------------')
 
         # Combine
         combined_dict = {}
@@ -82,7 +104,7 @@ class CombineUL:
             ue_entry = self.uejourneys_dict[uekey]
             if uekey in self.gnbjourneys_dict:
                 gnb_entry = self.gnbjourneys_dict[uekey]
-                # find the closest irtt send and receive timestamps
+                # find the closest nlmt send and receive timestamps
                 nlmt_key,nlmt_entry = closest_nlmt_entry_uplink(ue_entry['ip.in']['timestamp'], self.nlmtjourneys_dict)
                 if nlmt_entry:
                     combined_dict[uekey] = flatten_dict(nlmt_entry, parent_key='', sep='.') | flatten_dict(ue_entry, parent_key='', sep='.') | flatten_dict(gnb_entry, parent_key='', sep='.')
@@ -98,6 +120,7 @@ class CombineUL:
             del self.gnbjourneys_dict[delkey]
 
         for delkey in del_arr_nlmt:
-            del self.nlmtjourneys_dict[delkey]
+            if delkey in list(self.nlmtjourneys_dict.keys()):
+                del self.nlmtjourneys_dict[delkey]
 
         return pd.DataFrame(combined_dict).T  # Transpose to have keys as columns

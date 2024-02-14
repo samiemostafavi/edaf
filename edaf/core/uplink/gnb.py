@@ -3,8 +3,8 @@ import re
 from loguru import logger
 from collections import deque
 
-logger.remove()
-logger.add(sys.stderr, level="INFO")
+#logger.remove()
+#logger.add(sys.stderr, level="INFO")
 
 class RingBuffer:
     def __init__(self, size):
@@ -83,16 +83,16 @@ def find_MAC_DEC(hqpid_value,hqround,prev_lines,line_number):
     
     return mac_dec_arr
 
-def sort_key(line):
-    return float(line.split()[0])
+#def sort_key(line):
+#    return float(line.split()[0])
 
 class ProcessULGNB:
     def __init__(self):
         self.previous_lines = RingBuffer(MAX_DEPTH)
 
-    def run(self, unsortedlines):
+    def run(self, lines):
 
-        lines = sorted(unsortedlines, key=sort_key, reverse=False)
+        #lines = sorted(unsortedlines, key=sort_key, reverse=False)
         journeys = []
         ip_packets_counter = 0
         for line_number, line in enumerate(lines):

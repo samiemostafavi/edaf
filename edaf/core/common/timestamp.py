@@ -49,4 +49,4 @@ class rdtsctotsOnline():
                     logger.warning(f"non-numeric first element in {self.name} lseq: {l}")
             else:
                 logger.warning(f"unusual line in {self.name} lseq: {l}")
-        return newlines
+        return sorted(newlines)

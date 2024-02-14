@@ -3,8 +3,8 @@ import re
 from loguru import logger
 from collections import deque
 
-logger.remove()
-logger.add(sys.stderr, level="INFO")
+#logger.remove()
+#logger.add(sys.stderr, level="INFO")
 
 class RingBuffer:
     def __init__(self, size):
@@ -42,22 +42,22 @@ KW_MAC_2 = 'mac.harq'
 
 MAX_DEPTH = 500
 
-def sort_key(line):
-    return float(line.split()[0])
+#def sort_key(line):
+#    return float(line.split()[0])
 
 class ProcessULUE:
     def __init__(self):
         self.previous_lines = RingBuffer(MAX_DEPTH)
 
-    def run(self, unsortedlines):
-
-        lines = sorted(unsortedlines, key=sort_key, reverse=False)
+    def run(self, lines):
+        # we sort in the rdt process instead
+        #lines = sorted(unsortedlines, key=sort_key, reverse=False)
 
         journeys = []
         ip_packets_counter = 0
         for line_number, line in enumerate(lines):
             self.previous_lines.append(line)
-
+            #set_exit = False
             if KW_R in line:
                 line = line.replace('\n', '')
                 
@@ -71,6 +71,10 @@ class ProcessULUE:
                     timestamp = float(timestamp_match.group(1))
                     len_value = int(len_match.group(1))
                     pbuf_value = int(pbuf_match.group(1))
+                    #if timestamp == 1704239793.692519:
+                    #    for mitem in self.previous_lines.get_items():
+                    #        print(mitem)
+                    #    set_exit = True
 
                     logger.debug(f"[UE] Found '{KW_R}' in line {line_number}, len:{len_value}, PBuf: {pbuf_value}, ts: {timestamp}")
 
@@ -98,7 +102,7 @@ class ProcessULUE:
                                 len_value = int(len_match.group(1))
                                 pcbuf_value = int(pcbuf_match.group(1))
                             else:
-                                logger.warning(f"[UE] For {KW_PDCPC}, could not found timestamp or length in line {line_number-id-1}. Skipping this '{KW_R}' journey")
+                                logger.debug(f"[UE] For {KW_PDCPC}, could not found timestamp or length in line {line_number-id-1}. Skipping this '{KW_R}' journey")
                                 break
 
                             logger.debug(f"[UE] Found '{KW_PDCPC}' and '{pbufp}' in line {line_number-id-1}, len:{len_value}, timestamp: {timestamp}, PCbuf: {pcbuf_value}")
@@ -112,7 +116,7 @@ class ProcessULUE:
                             break
 
                     if not found_KW_PDCPC:
-                        logger.warning(f"[UE] Could not find '{KW_PDCPC}' and '{pbufp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
+                        logger.debug(f"[UE] Could not find '{KW_PDCPC}' and '{pbufp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
                         continue
 
                     # check for KW_PDCP
@@ -127,7 +131,7 @@ class ProcessULUE:
                                 len_value = int(len_match.group(1))
                                 r1buf_value = int(r1buf_match.group(1))
                             else:
-                                logger.warning(f"[UE] For {KW_PDCP}, could not found timestamp or length in in line {line_number-id-1}. Skipping this '{KW_R}' journey")
+                                logger.debug(f"[UE] For {KW_PDCP}, could not found timestamp or length in in line {line_number-id-1}. Skipping this '{KW_R}' journey")
                                 break
 
                             logger.debug(f"[UE] Found '{KW_PDCP}' and '{pcbufp}' in line {line_number-id-1}, len:{len_value}, timestamp: {timestamp}")
@@ -141,7 +145,7 @@ class ProcessULUE:
                             break
                     
                     if not found_KW_PDCP:
-                        logger.warning(f"[UE] Could not find '{KW_PDCP}' and '{pcbufp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
+                        logger.debug(f"[UE] Could not find '{KW_PDCP}' and '{pcbufp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
                         continue
 
 
@@ -159,7 +163,7 @@ class ProcessULUE:
                                 r2buf_value = int(r2buf_match.group(1))
                                 queue_value = int(q_match.group(1))
                             else:
-                                logger.warning(f"For {KW_RLC}, could not found timestamp or length in in line {line_number-id-1}. Skipping this '{KW_R}' journey")
+                                logger.debug(f"For {KW_RLC}, could not found timestamp or length in in line {line_number-id-1}. Skipping this '{KW_R}' journey")
                                 break
 
                             logger.debug(f"[UE] Found '{KW_RLC}' and '{r1bufp}' in line {line_number-id-1}, len:{len_value}, timestamp: {timestamp}")
@@ -175,7 +179,7 @@ class ProcessULUE:
                             break
                     
                     if not found_KW_RLC:
-                        logger.warning(f"[UE] Could not find '{KW_RLC}' and '{r1bufp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
+                        logger.debug(f"[UE] Could not find '{KW_RLC}' and '{r1bufp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
                         continue
 
                     
@@ -198,7 +202,7 @@ class ProcessULUE:
                                 sn_value = int(sn_match.group(1))
                                 m1buf_value = int(m1buf_match.group(1))
                             else:
-                                logger.warning(f"[UE] For {KW_RLC_TX}, could not found timestamp, length, or M1buf in in line {line_number-id-1}. Skipping this '{KW_R}' journey")
+                                logger.debug(f"[UE] For {KW_RLC_TX}, could not found timestamp, length, or M1buf in in line {line_number-id-1}. Skipping this '{KW_R}' journey")
                                 break
 
                             logger.debug(f"[UE] Found '{KW_RLC_TX}' and '{r2bufp}' in line {line_number-id-1}, len:{len_value}, timestamp: {timestamp}, Mbuf:{m1buf_value}, sn: {sn_value}, tbs: {tbs_value}")
@@ -233,7 +237,7 @@ class ProcessULUE:
                                         tbs_value = int(tbs_match.group(1))
                                         m2buf_value = int(m2buf_match.group(1))
                                     else:
-                                        logger.warning(f"[UE] For {KW_MAC_1}, could not find properties in line {line_number-jd-1}. Skipping this '{KW_R}' journey")
+                                        logger.debug(f"[UE] For {KW_MAC_1}, could not find properties in line {line_number-jd-1}. Skipping this '{KW_R}' journey")
                                         break
 
                                     logger.debug(f"[UE] Found '{KW_MAC_1}' and '{m1bufp}' in line {line_number-jd-1}, len:{len_value}, timestamp: {timestamp}, frame: {fm_value}, slot: {sl_value}")
@@ -252,7 +256,7 @@ class ProcessULUE:
                                     break
 
                             if not found_MAC_1:
-                                logger.warning(f"[UE] Could not find '{KW_MAC_1}' and '{m1bufp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
+                                logger.debug(f"[UE] Could not find '{KW_MAC_1}' and '{m1bufp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
                                 continue
 
                             # Check RLC_decoded for each RLC_reassembeled
@@ -271,7 +275,7 @@ class ProcessULUE:
                                         sl_value = int(sl_match.group(1))
                                         hqpid_value = int(hqpid_match.group(1))
                                     else:
-                                        logger.warning(f"[UE] For {KW_MAC_2}, could not find properties in line {line_number-jd-1}. Skipping this '{KW_R}' journey")
+                                        logger.debug(f"[UE] For {KW_MAC_2}, could not find properties in line {line_number-jd-1}. Skipping this '{KW_R}' journey")
                                         break
 
                                     logger.debug(f"[UE] Found '{KW_MAC_2}' and '{m2bufp}' in line {line_number-jd-1}, len:{len_value}, timestamp: {timestamp}, frame: {fm_value}, slot: {sl_value}")
@@ -287,7 +291,7 @@ class ProcessULUE:
                                     break
 
                             if not found_MAC_2:
-                                logger.warning(f"[UE] Could not find '{KW_MAC_2}' and '{m2bufp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
+                                logger.debug(f"[UE] Could not find '{KW_MAC_2}' and '{m2bufp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
                                 mac_2_dict = {}
 
                             RLC_ARR.append(
@@ -304,6 +308,9 @@ class ProcessULUE:
 
                     # result
                     journeys.append(journey)
+                    #if set_exit:
+                    #    print(journey)
+                    #    exit(0)
 
                     ip_packets_counter = ip_packets_counter+1
 
