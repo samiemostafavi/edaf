@@ -10,7 +10,6 @@ from edaf.core.uplink.nlmt import process_ul_nlmt
 from edaf.core.uplink.combine import CombineUL
 from edaf.core.uplink.decompose import process_ul_journeys
 
-factor = 1
 NUM_POP = 10000
 
 # in case you have offline parquet journey files, you can use this script to decompose delay
