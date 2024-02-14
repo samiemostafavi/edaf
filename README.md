@@ -66,6 +66,26 @@ Upon successful connection between gNB and UE, run the traffic generator NLMT cl
 
 EDAF populates the influxDB, check the database's UI on port 8086 of CN host.
 
+## Run EDAF Offline
+
+Instead of online networked mode, you can configure LATSEQ to produce `.lseq`, and NLMT to produce `.json.gz` files.
+In this case you can use `offline_edaf.py` script to process the data, decompose delay, and produce a parquet file.
+Pass the address of a folder to the script with the following structure:
+```
+FOLDER_ADDR/
+-- gnb/
+---- latseq.*.lseq
+-- ue/
+---- latseq.*.lseq
+-- upf/
+---- se_*.json.gz
+```
+
+For example:
+```
+python offline_edaf.py 240103_011728_FINAL_expB_Q1_results res.parquet
+```
+
 ## Publications
 
 ## License
