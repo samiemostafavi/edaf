@@ -10,7 +10,7 @@ sleep 1
 influx setup \
   --username edaf \
   --password 4c5f28e30698bf883e18193 \
-  --org KTH \
+  --org expeca \
   --bucket latency \
   --force
 

@@ -3,6 +3,7 @@ from collections import deque
 from loguru import logger
 import asyncio
 import os
+import json
 
 from edaf.core.common.timestamp import rdtsctotsOnline
 from edaf.core.uplink.gnb import ProcessULGNB
@@ -10,6 +11,7 @@ from edaf.core.uplink.ue import ProcessULUE
 from edaf.core.uplink.nlmt import process_ul_nlmt
 from edaf.core.uplink.combine import CombineUL
 from edaf.core.uplink.decompose import process_ul_journeys
+from edaf.api.influx import InfluxClient
 
 MAX_L1_UPF_DEPTH = 1000 # lines
 MAX_L2_UPF_DEPTH = 100 # journeys
@@ -19,6 +21,12 @@ MAX_L2_GNB_DEPTH = 100 # journeys
 
 MAX_L1_UE_DEPTH = 1000 # lines
 MAX_L2_UE_DEPTH = 100 # journeys
+
+org = "expeca"
+bucket = "latency"
+influx_db_address = "http://0.0.0.0:8086"
+auth_info_addr = "/EDAF/influx_auth.json"
+point_name = "packet_records"
 
 class RingBuffer:
     def __init__(self, size):
@@ -63,6 +71,14 @@ async def process_queues(upf_rawdata_queue, gnb_rawdata_queue, ue_rawdata_queue,
     upf_journeys_queue = RingBuffer(MAX_L2_UPF_DEPTH)
     combineul = CombineUL(standalone=standalone)
     gnb_journeys_queue, ue_journeys_queue, gnbrdts, gnbproc, uerdts, ueproc = None, None, None, None, None, None
+
+    if config["influx_token"]:
+        influx_cli = InfluxClient(influx_db_address, config["influx_token"], bucket, org, point_name)
+        print("influxDB client initialized")
+    else:
+        influx_cli = None
+        print("influxDB client None")
+
     if not standalone:
         gnb_journeys_queue = RingBuffer(MAX_L2_GNB_DEPTH)
         ue_journeys_queue = RingBuffer(MAX_L2_UE_DEPTH)
@@ -130,6 +146,13 @@ async def process_queues(upf_rawdata_queue, gnb_rawdata_queue, ue_rawdata_queue,
                         None,
                     )
                     df = process_ul_journeys(df,standalone=True)
+                    if df is not None:
+                        if len(df)>0:
+                            # print(df)
+                            # push df to influxdb
+                            if influx_cli:
+                                influx_cli.push_dataframe(df)
+                            
 
     except asyncio.CancelledError:
         pass
@@ -146,7 +169,7 @@ async def handle_client(reader, writer, client_name, config, rawdata_queue):
                 addr = writer.get_extra_info('peername')
                 logger.info(f"[{client_name} server] connection from {addr}.")
                 init = False
-            message = data.decode()
+            message = data.decode(errors='ignore')
             if message[-1] == '\n':
                 received_lines = message.splitlines()
                 if rem_str != '':
@@ -201,7 +224,20 @@ async def run_serve():
 
     print(f"Standalone mode:{standalone}")
 
+    # read influxtoken
+    try:
+        # Read the JSON file
+        with open(auth_info_addr) as f:
+            data = json.load(f)
+
+        # Extract token
+        token = data[0]['token']
+    except FileNotFoundError:
+        # If the file doesn't exist, set token to None
+        token = None
+
     config = {
+        "influx_token" : token,
         "UPF": {
             "PORT": 50009,
             "BUFFER_SIZE": 1000
