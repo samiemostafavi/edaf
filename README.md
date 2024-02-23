@@ -86,6 +86,28 @@ For example:
 python offline_edaf.py 240103_011728_FINAL_expB_Q1_results res.parquet
 ```
 
+## Run EDAF Standalone
+
+If you are interested in using EDAF over an arbitrary network link, and not OpenAirInterface, follow this section.
+In such a scenario, you will lose the decomposition capability and you can only analyze the end-to-end delay.
+The hosts are required to be clock synchronized.
+For running standalone EDAF experiments, 2 hosts are required:
+1. Server host
+2. Client host
+
+Follow the steps below to run EDAF in standalone configuration.
+
+### 1) Run EDAF Server
+
+Run EDAF on the server host by first creating a folder on the host for storing the database.
+
+Use the following command after creating `influxdbv2` folder on the server host:
+```
+docker run -d --rm --volume `pwd`/influxdbv2:/root/.influxdbv2 --network oai-5gcn-net --ip 172.16.32.140  --name edaf samiemostafavi/edaf:latest
+docker network connect edaf-net --ip 192.168.32.140 edaf
+```
+Check influxdb UI on the browser: `http://192.168.32.140:8086`
+
 ## Publications
 
 ## License

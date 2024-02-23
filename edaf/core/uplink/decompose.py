@@ -105,8 +105,18 @@ def myfloor(inp_arr):
             out_arr.append(math.nan)
     return np.array(out_arr,dtype=np.float64)
 
-def process_ul_journeys(df, ignore_core=False):
+def process_ul_journeys(df, ignore_core=False, standalone=False):
     if len(df) == 0:
+        return df
+
+    if standalone:
+        ########### STANDALONE End to End Delay #########
+        timestamp1 = df["receive.timestamp"]
+        timestamp2 = df["send.timestamp"]
+        # Convert timestamps to milliseconds and calculate the difference
+        timestamp_difference = ((timestamp1 - timestamp2) * 1000) #-32.0
+        df['e2e_delay'] = timestamp_difference
+        df = df[df['e2e_delay'] >= 0]
         return df
 
     ################### POST PROCESS ###################

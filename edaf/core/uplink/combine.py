@@ -48,24 +48,30 @@ def closest_nlmt_entry_uplink(ue_timestamp, nlmt_dict):
     return None,None
 
 class CombineUL:
-    def __init__(self, max_depth=DEFAULT_MAX_DEPTH):
-        self.gnbjourneys_dict = FixSizeOrderedDict(max=max_depth)
-        self.uejourneys_dict = FixSizeOrderedDict(max=max_depth)
-        self.nlmtjourneys_dict = FixSizeOrderedDict(max=max_depth)
+    def __init__(self, max_depth=DEFAULT_MAX_DEPTH, standalone=False):
+        self.standalone = standalone
+        if not standalone:
+            self.gnbjourneys_dict = FixSizeOrderedDict(max=max_depth)
+            self.uejourneys_dict = FixSizeOrderedDict(max=max_depth)
+            self.nlmtjourneys_dict = FixSizeOrderedDict(max=max_depth)
+        else:
+            self.gnbjourneys_dict, self.uejourneys_dict = None, None
+            self.nlmtjourneys_dict = FixSizeOrderedDict(max=max_depth)
 
-    def run(self,upfjourneys_data, gnbjourneys_data, uejourneys_data):
+    def run(self,upfjourneys_data, gnbjourneys_data = None, uejourneys_data = None):
 
-        for entry in gnbjourneys_data:
-            try:
-                self.gnbjourneys_dict[entry['gtp.out']['sn']] = entry
-            except:
-                pass
+        if not self.standalone:
+            for entry in gnbjourneys_data:
+                try:
+                    self.gnbjourneys_dict[entry['gtp.out']['sn']] = entry
+                except:
+                    pass
 
-        for entry in uejourneys_data:
-            try:
-                self.uejourneys_dict[entry['rlc.queue']['segments'][0]['rlc.txpdu']['sn']] = entry
-            except:
-                pass
+            for entry in uejourneys_data:
+                try:
+                    self.uejourneys_dict[entry['rlc.queue']['segments'][0]['rlc.txpdu']['sn']] = entry
+                except:
+                    pass
 
         for entry in upfjourneys_data:
             # online data
@@ -87,19 +93,31 @@ class CombineUL:
             else:
                 return None
 
-        logger.debug('---------------------')
-        logger.debug('gnb:')
-        logger.debug([item for item in self.gnbjourneys_dict.items()])
-        logger.debug('ue:')
-        logger.debug([item for item in self.uejourneys_dict.items()])
-        logger.debug('nlmt:')
-        logger.debug([item for item in self.nlmtjourneys_dict.items()])
-        logger.debug('---------------------')
+        #logger.debug('---------------------')
+        #logger.debug('gnb:')
+        #logger.debug([item for item in self.gnbjourneys_dict.items()])
+        #logger.debug('ue:')
+        #logger.debug([item for item in self.uejourneys_dict.items()])
+        #logger.debug('nlmt:')
+        #logger.debug([item for item in self.nlmtjourneys_dict.items()])
+        #logger.debug('---------------------')
 
-        # Combine
+        # Combine standalone
         combined_dict = {}
-        del_arr = []
         del_arr_nlmt = []
+        del_arr = []
+        if self.standalone:
+            for seqno in self.nlmtjourneys_dict:
+                nlmt_entry = self.nlmtjourneys_dict[seqno]
+                combined_dict[seqno] = flatten_dict(nlmt_entry, parent_key='', sep='.')
+                del_arr_nlmt.append(seqno)
+
+            for delkey in del_arr_nlmt:
+                del self.nlmtjourneys_dict[delkey]
+
+            return pd.DataFrame(combined_dict).T  # Transpose to have keys as columns
+
+        # Combine non-standalone
         for uekey in self.uejourneys_dict:
             ue_entry = self.uejourneys_dict[uekey]
             if uekey in self.gnbjourneys_dict:

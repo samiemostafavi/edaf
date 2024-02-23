@@ -2,6 +2,7 @@ import threading
 from collections import deque
 from loguru import logger
 import asyncio
+import os
 
 from edaf.core.common.timestamp import rdtsctotsOnline
 from edaf.core.uplink.gnb import ProcessULGNB
@@ -52,20 +53,33 @@ class RingBuffer:
 
 
 async def process_queues(upf_rawdata_queue, gnb_rawdata_queue, ue_rawdata_queue, config):
+
+    # set standalone var
+    if (gnb_rawdata_queue is None) or (ue_rawdata_queue is None):
+        standalone = True
+    else:
+        standalone = False
+
     upf_journeys_queue = RingBuffer(MAX_L2_UPF_DEPTH)
-    gnb_journeys_queue = RingBuffer(MAX_L2_GNB_DEPTH)
-    ue_journeys_queue = RingBuffer(MAX_L2_UE_DEPTH)
-    gnbrdts = rdtsctotsOnline("GNB")
-    gnbproc = ProcessULGNB()
-    uerdts = rdtsctotsOnline("UE")
-    ueproc = ProcessULUE()
-    combineul = CombineUL()
+    combineul = CombineUL(standalone=standalone)
+    gnb_journeys_queue, ue_journeys_queue, gnbrdts, gnbproc, uerdts, ueproc = None, None, None, None, None, None
+    if not standalone:
+        gnb_journeys_queue = RingBuffer(MAX_L2_GNB_DEPTH)
+        ue_journeys_queue = RingBuffer(MAX_L2_UE_DEPTH)
+        gnbrdts = rdtsctotsOnline("GNB")
+        gnbproc = ProcessULGNB()
+        uerdts = rdtsctotsOnline("UE")
+        ueproc = ProcessULUE()
+        
     try:
         while True:
             await asyncio.sleep(0.1)
             upf_queue_length = upf_rawdata_queue.get_length()
-            gnb_queue_length = gnb_rawdata_queue.get_length()
-            ue_queue_length = ue_rawdata_queue.get_length()
+            if not standalone:
+                gnb_queue_length = gnb_rawdata_queue.get_length()
+                ue_queue_length = ue_rawdata_queue.get_length()
+            else:
+                gnb_queue_length, ue_queue_length = 0,0
             
             #logger.info(f"Queue lengths: UPF={upf_queue_length}, GNB={gnb_queue_length}, UE={ue_queue_length}")
 
@@ -95,18 +109,27 @@ async def process_queues(upf_rawdata_queue, gnb_rawdata_queue, ue_rawdata_queue,
                     for journey in ue_journeys:
                         ue_journeys_queue.append(journey)
     
-            # Create e2e jouneys
-            ue_jrny_len = ue_journeys_queue.get_length()
-            gnb_jrny_len = gnb_journeys_queue.get_length()
-            upf_jrny_len = upf_journeys_queue.get_length()
-            if ue_jrny_len > 20 and gnb_jrny_len > 20 and upf_jrny_len > 20:
-                df = combineul.run(
-                    upf_journeys_queue.pop_items(upf_jrny_len),
-                    gnb_journeys_queue.pop_items(gnb_jrny_len),
-                    ue_journeys_queue.pop_items(ue_jrny_len)
-                )
-                df = process_ul_journeys(df)
-                print(df)
+            # Create e2e journeys
+            if not standalone:
+                ue_jrny_len = ue_journeys_queue.get_length()
+                gnb_jrny_len = gnb_journeys_queue.get_length()
+                upf_jrny_len = upf_journeys_queue.get_length()
+                if ue_jrny_len > 20 and gnb_jrny_len > 20 and upf_jrny_len > 20:
+                    df = combineul.run(
+                        upf_journeys_queue.pop_items(upf_jrny_len),
+                        gnb_journeys_queue.pop_items(gnb_jrny_len),
+                        ue_journeys_queue.pop_items(ue_jrny_len)
+                    )
+                    df = process_ul_journeys(df)
+            else:
+                upf_jrny_len = upf_journeys_queue.get_length()
+                if upf_jrny_len > 20:
+                    df = combineul.run(
+                        upf_journeys_queue.pop_items(upf_jrny_len),
+                        None,
+                        None,
+                    )
+                    df = process_ul_journeys(df,standalone=True)
 
     except asyncio.CancelledError:
         pass
@@ -149,6 +172,9 @@ async def handle_client(reader, writer, client_name, config, rawdata_queue):
         writer.close()
 
 async def start_server(client_name, config, rawdata_queue):
+    if rawdata_queue is None:
+        return
+
     server = await asyncio.start_server(
         lambda r, w: handle_client(r, w, client_name, config, rawdata_queue), 
         host='0.0.0.0', 
@@ -161,30 +187,49 @@ async def start_server(client_name, config, rawdata_queue):
         await server.serve_forever()
 
 async def run_serve():
+
+    # get version
+    from .. import __version__
+    print(f"Running EDAF server v{__version__}")
+
+    # get standalone env variable
+    standalone_var_str = os.environ.get("STANDALONE")
+    if standalone_var_str is not None:
+        standalone = standalone_var_str.lower() in ['true', '1', 'yes']
+    else:
+        standalone = False
+
+    print(f"Standalone mode:{standalone}")
+
     config = {
         "UPF": {
             "PORT": 50009,
             "BUFFER_SIZE": 1000
-        },
-        "GNB": {
-            "PORT": 50015,
-            "BUFFER_SIZE": 1000
-        },
-        "UE": {
-            "PORT": 50011,
-            "BUFFER_SIZE": 1000
         }
     }
-
     upf_rawdata_queue = RingBuffer(MAX_L1_UPF_DEPTH)
+    gnb_rawdata_queue = None
+    ue_rawdata_queue = None
+
+    if not standalone:
+        config = {
+            **config,
+            "GNB": {
+                "PORT": 50015,
+                "BUFFER_SIZE": 1000
+            },
+            "UE": {
+                "PORT": 50011,
+                "BUFFER_SIZE": 1000
+            }
+        }
+
+        gnb_rawdata_queue = RingBuffer(MAX_L1_GNB_DEPTH)
+        ue_rawdata_queue = RingBuffer(MAX_L1_UE_DEPTH)
+
     upftask = asyncio.create_task(start_server("UPF", config, upf_rawdata_queue))
-
-    gnb_rawdata_queue = RingBuffer(MAX_L1_GNB_DEPTH)
     gnbtask = asyncio.create_task(start_server("GNB", config, gnb_rawdata_queue))
-
-    ue_rawdata_queue = RingBuffer(MAX_L1_UE_DEPTH)
     uetask = asyncio.create_task(start_server("UE", config, ue_rawdata_queue))
-
     processtask = asyncio.create_task(process_queues(upf_rawdata_queue, gnb_rawdata_queue, ue_rawdata_queue, config))
 
     try:
@@ -202,9 +247,6 @@ async def run_serve():
             pass
 
 def serve():
-
-    from .. import __version__
-    print(f"Running EDAF server v{__version__}")
 
     try:
         asyncio.run(run_serve())
