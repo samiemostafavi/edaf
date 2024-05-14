@@ -45,6 +45,7 @@ influx auth list --json > influx_auth.json
 # run edaf standalone in a screen session
 screen -S edaf
 cd /EDAF/ && STANDALONE=true python3.9 edaf.py
+# exit the screen by pressing Ctrl-A and D
 
 cd / && wget https://raw.githubusercontent.com/samiemostafavi/nlmt/master/nlmt \
     && cp nlmt /usr/local/bin/ \
