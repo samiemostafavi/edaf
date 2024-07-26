@@ -17,8 +17,6 @@ NUM_POP = 10000
 # FOLDER_ADDR/
 # -- gnb/
 # ---- latseq.*.lseq
-# -- ue/
-# ---- latseq.*.lseq
 # -- upf/
 # ---- se_*.json.gz
 
@@ -64,18 +62,12 @@ if __name__ == "__main__":
     gnb_lseq_file = list(gnb_path.glob("latseq.*.lseq"))[0]
     logger.info(f"found gnb lseq file: {gnb_lseq_file}")
 
-    ue_path = folder_path.joinpath("ue")
-    ue_lseq_file = list(ue_path.glob("latseq.*.lseq"))[0]
-    logger.info(f"found ue lseq file: {ue_lseq_file}")
-
     upf_path = folder_path.joinpath("upf")
     upf_file = list(upf_path.glob("se_*.json.gz"))[0]
     logger.info(f"found upf json file: {upf_file}")
 
     gnbrdts = rdtsctotsOnline("GNB")
     gnbproc = ProcessULGNB()
-    uerdts = rdtsctotsOnline("UE")
-    ueproc = ProcessULUE()
     combineul = CombineUL(max_depth=NUM_POP)
 
     # NLMT
@@ -87,19 +79,10 @@ if __name__ == "__main__":
     gnb_lseq_file = open(gnb_lseq_file, 'r')
     gnb_lines = gnb_lseq_file.readlines()
     l1linesgnb = gnbrdts.return_rdtsctots(gnb_lines)
+    print(l1linesgnb[50:60])
     if len(l1linesgnb) > 0:
         gnb_journeys = gnbproc.run(l1linesgnb)
     logger.info(f"Loaded {len(gnb_journeys)} GNB trips")
-
-    # UE
-    ue_lseq_file = open(ue_lseq_file, 'r')
-    ue_lines = ue_lseq_file.readlines()
-    l1linesue = uerdts.return_rdtsctots(ue_lines)
-    l1linesue.reverse()
-    if len(l1linesue) > 0:
-        ue_journeys = ueproc.run(l1linesue)
-    logger.info(f"Loaded {len(ue_journeys)} UE trips")
-    ue_journeys.reverse()
 
     ind = 0
     df = pd.DataFrame()
@@ -107,18 +90,25 @@ if __name__ == "__main__":
         df_combined = combineul.run(
             nlmt_journeys[ind:ind+NUM_POP],
             gnb_journeys[ind:ind+NUM_POP],
-            ue_journeys[ind:ind+NUM_POP]
         )
+        df_combined.to_csv('out.csv')
         logger.info(f'Combined len: {len(df_combined)}')
-
         ind += NUM_POP
-        if ind > len(nlmt_journeys) or ind > len(nlmt_journeys) or ind > len(nlmt_journeys):
-            break
-
         df_to_append = process_ul_journeys(df_combined)
         logger.info(f'Processed len: {len(df_to_append)}')
         df = pd.concat([df, df_to_append], ignore_index=True)
-    
+        if ind > len(nlmt_journeys) or ind > len(nlmt_journeys) or ind > len(nlmt_journeys):
+            break
+    # for i,l in enumerate(gnb_journeys):
+    #     if 'gtp.out' in l:
+    #         for j in range(i-100, i+1):
+    #             if '--mac.decoded' in gnb_journeys[j] or 'gtp.out' in gnb_journeys[j]:
+    #                 print(gnb_journeys[j])
+    with open('l1linesgnb.txt', 'w') as file:
+        for item in l1linesgnb:
+            file.write(f"{item}\n")
+
+
     logger.info(f"Combines logs, created a df with {len(df)} entries.")
     df.to_parquet(result_parquet_file, engine='pyarrow')
 

@@ -42,7 +42,7 @@ KW_MAC_DEM = 'mac.demuxed'
 KW_MAC_DEC = 'mac.decoded' # this is the key to recognize the retransmissions
 
 # maximum number of lines to check
-MAX_DEPTH = 500
+MAX_DEPTH = 100
 
 
 def find_MAC_DEC(hqpid_value,hqround,prev_lines,line_number):
@@ -207,6 +207,8 @@ class ProcessULGNB:
                             found_RLC_DC = False
                             for jd,prev_ljne in enumerate(prev_lines):
                                 if ('--'+KW_RLC_DC in prev_ljne) and (mrbufstr in prev_ljne):
+                                    if 'sn46.' in prev_line:
+                                        print(prev_line, prev_ljne)
                                     timestamp_match = re.search(r'^(\d+\.\d+)', prev_ljne)
                                     len_match = re.search(r'len(\d+)', prev_ljne)
                                     fm_match = re.search(r'fm(\d+)', prev_ljne)

@@ -47,18 +47,27 @@ def closest_nlmt_entry_uplink(ue_timestamp, nlmt_dict):
             return seqno,entry
     return None,None
 
+
+def closest_nlmt_entry_uplink_gnb(gnb_timestamp, nlmt_dict):
+    for seqno in nlmt_dict:
+        entry = nlmt_dict[seqno]
+        receive_timestamp = entry['receive.timestamp']
+        if abs(receive_timestamp-gnb_timestamp) < TS_TIME_MARGIN:
+            return seqno,entry
+    return None,None
+
 class CombineUL:
     def __init__(self, max_depth=DEFAULT_MAX_DEPTH, standalone=False):
         self.standalone = standalone
         if not standalone:
             self.gnbjourneys_dict = FixSizeOrderedDict(max=max_depth)
-            self.uejourneys_dict = FixSizeOrderedDict(max=max_depth)
+            #self.uejourneys_dict = FixSizeOrderedDict(max=max_depth)
             self.nlmtjourneys_dict = FixSizeOrderedDict(max=max_depth)
         else:
-            self.gnbjourneys_dict, self.uejourneys_dict = None, None
+            #self.gnbjourneys_dict, self.uejourneys_dict = None, None
             self.nlmtjourneys_dict = FixSizeOrderedDict(max=max_depth)
 
-    def run(self,upfjourneys_data, gnbjourneys_data = None, uejourneys_data = None):
+    def run(self, upfjourneys_data, gnbjourneys_data = None, uejourneys_data = None):
 
         if not self.standalone:
             for entry in gnbjourneys_data:
@@ -67,11 +76,11 @@ class CombineUL:
                 except:
                     pass
 
-            for entry in uejourneys_data:
-                try:
-                    self.uejourneys_dict[entry['rlc.queue']['segments'][0]['rlc.txpdu']['sn']] = entry
-                except:
-                    pass
+            # for entry in uejourneys_data:
+            #     try:
+            #         self.uejourneys_dict[entry['rlc.queue']['segments'][0]['rlc.txpdu']['sn']] = entry
+            #     except:
+            #         pass
 
         for entry in upfjourneys_data:
             # online data
@@ -118,23 +127,17 @@ class CombineUL:
             return pd.DataFrame(combined_dict).T  # Transpose to have keys as columns
 
         # Combine non-standalone
-        for uekey in self.uejourneys_dict:
-            ue_entry = self.uejourneys_dict[uekey]
-            if uekey in self.gnbjourneys_dict:
-                gnb_entry = self.gnbjourneys_dict[uekey]
-                # find the closest nlmt send and receive timestamps
-                nlmt_key,nlmt_entry = closest_nlmt_entry_uplink(ue_entry['ip.in']['timestamp'], self.nlmtjourneys_dict)
-                if nlmt_entry:
-                    combined_dict[uekey] = flatten_dict(nlmt_entry, parent_key='', sep='.') | flatten_dict(ue_entry, parent_key='', sep='.') | flatten_dict(gnb_entry, parent_key='', sep='.')
-                    del_arr.append(uekey)
-                    del_arr_nlmt.append(nlmt_key)
-                else:
-                    logger.debug(f"Could not find ue entry in nlmt for sn {uekey}")
+        for gnbkey in self.gnbjourneys_dict:
+            gnb_entry = self.gnbjourneys_dict[gnbkey]   
+            # find the closest nlmt send and receive timestamps
+            nlmt_key,nlmt_entry = closest_nlmt_entry_uplink_gnb(gnb_entry['gtp.out']['timestamp'], self.nlmtjourneys_dict)
+            if nlmt_entry:
+                combined_dict[gnbkey] = flatten_dict(nlmt_entry, parent_key='', sep='.') | flatten_dict(gnb_entry, parent_key='', sep='.')
+                del_arr.append(gnbkey)
+                del_arr_nlmt.append(nlmt_key)
             else:
-                logger.debug(f"Could not find ue entry in gnb for sn {uekey}")
-        
+                logger.debug(f"Could not find gnb entry in nlmt for sn {gnbkey}")
         for delkey in del_arr:
-            del self.uejourneys_dict[delkey]
             del self.gnbjourneys_dict[delkey]
 
         for delkey in del_arr_nlmt:
