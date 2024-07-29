@@ -79,7 +79,6 @@ if __name__ == "__main__":
     gnb_lseq_file = open(gnb_lseq_file, 'r')
     gnb_lines = gnb_lseq_file.readlines()
     l1linesgnb = gnbrdts.return_rdtsctots(gnb_lines)
-    print(l1linesgnb[50:60])
     if len(l1linesgnb) > 0:
         gnb_journeys = gnbproc.run(l1linesgnb)
     logger.info(f"Loaded {len(gnb_journeys)} GNB trips")
@@ -91,7 +90,7 @@ if __name__ == "__main__":
             nlmt_journeys[ind:ind+NUM_POP],
             gnb_journeys[ind:ind+NUM_POP],
         )
-        df_combined.to_csv('out.csv')
+        #df_combined.to_csv('out.csv')
         logger.info(f'Combined len: {len(df_combined)}')
         ind += NUM_POP
         df_to_append = process_ul_journeys(df_combined)
@@ -104,9 +103,9 @@ if __name__ == "__main__":
     #         for j in range(i-100, i+1):
     #             if '--mac.decoded' in gnb_journeys[j] or 'gtp.out' in gnb_journeys[j]:
     #                 print(gnb_journeys[j])
-    with open('l1linesgnb.txt', 'w') as file:
-        for item in l1linesgnb:
-            file.write(f"{item}\n")
+    # with open('l1linesgnb.txt', 'w') as file:
+    #     for item in l1linesgnb:
+    #         file.write(f"{item}\n")
 
 
     logger.info(f"Combines logs, created a df with {len(df)} entries.")

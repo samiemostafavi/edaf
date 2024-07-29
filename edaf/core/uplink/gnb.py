@@ -181,7 +181,8 @@ class ProcessULGNB:
                     # check for KW_RLC
                     RLC_ARR = []
                     lengths = []
-                    for id,prev_line in enumerate(prev_lines):
+                    rlc_assemb_start_id = id
+                    for id,prev_line in enumerate(prev_lines[rlc_assemb_start_id:]):
                         if ('--'+KW_RLC in prev_line) and (sngtp in prev_line):
                             timestamp_match = re.search(r'^(\d+\.\d+)', prev_line)
                             len_match = re.search(r'len(\d+)', prev_line)
@@ -201,14 +202,13 @@ class ProcessULGNB:
                                 'timestamp' : timestamp,
                                 'length' : len_value,
                             }
-
+                            
                             # Check RLC_decoded for each RLC_reassembeled
                             mrbufstr = 'MRbuf'+mrbuf_value
                             found_RLC_DC = False
-                            for jd,prev_ljne in enumerate(prev_lines):
+                            rlc_dc_start_id = rlc_assemb_start_id+id
+                            for jd,prev_ljne in enumerate(prev_lines[rlc_dc_start_id:]):
                                 if ('--'+KW_RLC_DC in prev_ljne) and (mrbufstr in prev_ljne):
-                                    if 'sn46.' in prev_line:
-                                        print(prev_line, prev_ljne)
                                     timestamp_match = re.search(r'^(\d+\.\d+)', prev_ljne)
                                     len_match = re.search(r'len(\d+)', prev_ljne)
                                     fm_match = re.search(r'fm(\d+)', prev_ljne)
@@ -248,7 +248,8 @@ class ProcessULGNB:
                             slstr = 'sl' + str(sl_value)
                             hqstr = 'hqpid' + str(hqpid_value)
                             found_MAC_DEM = False
-                            for jd,prev_ljne in enumerate(prev_lines):
+                            mac_dem_start_id = rlc_dc_start_id+jd
+                            for jd,prev_ljne in enumerate(prev_lines[mac_dem_start_id:]):
                                 if ('--'+KW_MAC_DEM in prev_ljne) and (frstr in prev_ljne) and (slstr in prev_ljne) and (hqstr in prev_ljne):
                                     timestamp_match = re.search(r'^(\d+\.\d+)', prev_ljne)
                                     len_match = re.search(r'len(\d+)', prev_ljne)
@@ -273,7 +274,6 @@ class ProcessULGNB:
                             if not found_MAC_DEM:
                                 logger.warning(f"[GNB] Could not find '{KW_MAC_DEM}', '{frstr}', '{slstr}', and '{hqstr}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
                                 continue
-
                             mac_demuxed_dict = {
                                 'frame':fm_value,
                                 'slot':sl_value,
@@ -283,9 +283,8 @@ class ProcessULGNB:
                                 'hqround': hq_value,
                                 'timestamp' : timestamp,
                                 'length' : len_value,
-                                KW_MAC_DEC : find_MAC_DEC(hqpid_value,hq_value,prev_lines,line_number),
+                                KW_MAC_DEC : find_MAC_DEC(hqpid_value,hq_value,prev_lines[id:],line_number),
                             }
-
                             RLC_ARR.append(
                                 {
                                     KW_RLC : rlc_reass_dict,
