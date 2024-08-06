@@ -298,54 +298,54 @@ class ProcessULUE:
                             if not found_MAC_2:
                                 logger.debug(f"[UE] Could not find '{KW_MAC_2}' and '{m2bufp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
                                 mac_2_dict = {}
-
-                            # Check RLC_decoded for each RLC_reassembeled
-                            found_MAC_3 = False
-                            for jd,prev_ljne in enumerate(prev_lines):
-                                if ("--"+KW_MAC_3 in prev_ljne) and (hbufp in prev_ljne):
-                                    timestamp_match = re.search(r'^(\d+\.\d+)', prev_ljne)
-                                    len_match = re.search(r'len(\d+)', prev_ljne)
-                                    fm_match = re.search(r'fm(\d+)', prev_ljne)
-                                    sl_match = re.search(r'sl(\d+)', prev_ljne)
-                                    hqpid_match = re.search(r'hqpid(\d+)', prev_ljne)
-                                    mod_or_match = re.search(r'mod_or(\d+)', prev_ljne)
-                                    nb_sym_match = re.search(r'nb_sym(\d+)', prev_ljne)
-                                    nb_rb_match = re.search(r'nb_rb(\d+)', prev_ljne)
-                                    rnti_match = re.search(r'rnti([0-9a-fA-F]+)', prev_ljne)
-                                    if len_match and timestamp_match and fm_match and sl_match and hqpid_match and mod_or_match and nb_sym_match and nb_rb_match and rnti_match:
-                                        timestamp = float(timestamp_match.group(1))
-                                        len_value = int(len_match.group(1))
-                                        fm_value = int(fm_match.group(1))
-                                        sl_value = int(sl_match.group(1))
-                                        hqpid_value = int(hqpid_match.group(1))
-                                        mod_or_value = int(mod_or_match.group(1))
-                                        nb_sym_value = int(nb_sym_match.group(1))
-                                        nb_rb_value = int(nb_rb_match.group(1))
-                                        rnti_value = rnti_match.group(1)
-                                    else:
-                                        logger.debug(f"[UE] For {KW_MAC_2}, could not find properties in line {line_number-jd-1}. Skipping this '{KW_R}' journey")
-                                        break
-
-                                    logger.debug(f"[UE] Found '{KW_MAC_2}' and '{m2bufp}' in line {line_number-jd-1}, len:{len_value}, timestamp: {timestamp}, frame: {fm_value}, slot: {sl_value}")
-
-                                    mac_3_dict = {
-                                        'hqpid': hqpid_value,
-                                        'frame': fm_value,
-                                        'slot': sl_value,
-                                        'timestamp' : timestamp,
-                                        'length' : len_value,
-                                        'mod_or' : mod_or_value,
-                                        'nb_sym' : nb_sym_value,
-                                        'nb_rb' : nb_rb_value,
-                                        'rnti' : rnti_value,
-                                    }
-                                    found_MAC_3 = True
-                                    break
-
-                            if not found_MAC_3:
-                                logger.debug(f"[UE] Could not find '{KW_MAC_3}' and '{hbufp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
                                 mac_3_dict = {}
-
+                            else:
+                                # Check RLC_decoded for each RLC_reassembeled
+                                found_MAC_3 = False
+                                for jd,prev_ljne in enumerate(prev_lines):
+                                    if ("--"+KW_MAC_3 in prev_ljne) and (hbufp in prev_ljne):
+                                        timestamp_match = re.search(r'^(\d+\.\d+)', prev_ljne)
+                                        len_match = re.search(r'len(\d+)', prev_ljne)
+                                        fm_match = re.search(r'fm(\d+)', prev_ljne)
+                                        sl_match = re.search(r'sl(\d+)', prev_ljne)
+                                        hqpid_match = re.search(r'hqpid(\d+)', prev_ljne)
+                                        mod_or_match = re.search(r'mod_or(\d+)', prev_ljne)
+                                        nb_sym_match = re.search(r'nb_sym(\d+)', prev_ljne)
+                                        nb_rb_match = re.search(r'nb_rb(\d+)', prev_ljne)
+                                        rnti_match = re.search(r'rnti([0-9a-fA-F]+)', prev_ljne)
+                                        if len_match and timestamp_match and fm_match and sl_match and hqpid_match and mod_or_match and nb_sym_match and nb_rb_match and rnti_match:
+                                            timestamp = float(timestamp_match.group(1))
+                                            len_value = int(len_match.group(1))
+                                            fm_value = int(fm_match.group(1))
+                                            sl_value = int(sl_match.group(1))
+                                            hqpid_value = int(hqpid_match.group(1))
+                                            mod_or_value = int(mod_or_match.group(1))
+                                            nb_sym_value = int(nb_sym_match.group(1))
+                                            nb_rb_value = int(nb_rb_match.group(1))
+                                            rnti_value = rnti_match.group(1)
+                                        else:
+                                            logger.debug(f"[UE] For {KW_MAC_2}, could not find properties in line {line_number-jd-1}. Skipping this '{KW_R}' journey")
+                                            break
+    
+                                        logger.debug(f"[UE] Found '{KW_MAC_2}' and '{m2bufp}' in line {line_number-jd-1}, len:{len_value}, timestamp: {timestamp}, frame: {fm_value}, slot: {sl_value}")
+    
+                                        mac_3_dict = {
+                                            'hqpid': hqpid_value,
+                                            'frame': fm_value,
+                                            'slot': sl_value,
+                                            'timestamp' : timestamp,
+                                            'length' : len_value,
+                                            'mod_or' : mod_or_value,
+                                            'nb_sym' : nb_sym_value,
+                                            'nb_rb' : nb_rb_value,
+                                            'rnti' : rnti_value,
+                                        }
+                                        found_MAC_3 = True
+                                        break
+    
+                                if not found_MAC_3:
+                                    logger.debug(f"[UE] Could not find '{KW_MAC_3}' and '{hbufp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
+                                    mac_3_dict = {}
 
                             RLC_ARR.append(
                                 {
