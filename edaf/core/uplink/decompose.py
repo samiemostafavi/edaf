@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import pandas as pd
+from loguru import logger
 
 MAX_SEGMENTS = 20
 MAX_HQROUND = 5
@@ -8,13 +9,20 @@ RU_LATENCY_MS = 0.5 #ms
 SLOT_DUR = 0.5 # ms
 
 # Add a new column: rlc.reassembled.num_segments
-def get_num_segments(row):
+def get_num_segments_gnb(row):
     last_seg = 0
     for i in range(MAX_SEGMENTS):
-        #if f'rlc.queue.segments.{i}.rlc.txpdu.timestamp' in row:
         if f'rlc.reassembled.{i}.mac.demuxed.hqround' in row:
-            #if row[f'rlc.queue.segments.{i}.rlc.txpdu.timestamp'] > 0:
             if row[f'rlc.reassembled.{i}.mac.demuxed.hqround'] > 0:
+                last_seg = i
+    return last_seg
+
+# Add a new column: rlc.queue.segments.num_segments
+def get_num_segments_ue(row):
+    last_seg = 0
+    for i in range(MAX_SEGMENTS):
+        if f'rlc.queue.segments.{i}.rlc.txpdu.timestamp' in row:
+            if row[f'rlc.queue.segments.{i}.rlc.txpdu.timestamp'] > 0:
                 last_seg = i
     return last_seg
 
@@ -119,12 +127,16 @@ def process_ul_journeys(df, ignore_core=False, standalone=False):
         # Convert timestamps to milliseconds and calculate the difference
         timestamp_difference = ((timestamp1 - timestamp2) * 1000) #-32.0
         df['e2e_delay'] = timestamp_difference
-        #df = df[df['e2e_delay'] >= 0]
+        filtered_df = df[df['e2e_delay'] < 0]
+        if filtered_df.shape[0] > 0:
+            logger.warning(f"{filtered_df.shape[0]} out of {df.shape[0]} got filtered due to negative e2e delay")
+        df = df[df['e2e_delay'] >= 0]
         return df
 
     ################### POST PROCESS ###################
     # find the number of segments for each packet
-    df['rlc.reassembled.num_segments'] = df.apply(get_num_segments, axis=1)
+    df['rlc.reassembled.num_segments'] = df.apply(get_num_segments_gnb, axis=1)
+    df['rlc.queue.segments.num_segments'] = df.apply(get_num_segments_ue, axis=1)
 
     # find the last segment's service time
     df['rlc.queue.segments.last.rlc.txpdu.timestamp'] = df.apply(get_last_segment_txpdu_ts, axis=1)
@@ -153,7 +165,12 @@ def process_ul_journeys(df, ignore_core=False, standalone=False):
     # Convert timestamps to milliseconds and calculate the difference
     timestamp_difference = ((timestamp1 - timestamp2) * 1000) #-32.0
     df['e2e_delay'] = timestamp_difference
+    filtered_df = df[df['e2e_delay'] < 0]
+    if filtered_df.shape[0] > 0:
+        logger.warning(f"{filtered_df.shape[0]} out of {df.shape[0]} got filtered due to negative e2e delay")
     df = df[df['e2e_delay'] >= 0]
+    if df.shape[0] == 0:
+        return df;
     #print(len(df))
 
     ################### Core Delay ###################
@@ -168,7 +185,13 @@ def process_ul_journeys(df, ignore_core=False, standalone=False):
         df['core_delay'] = timestamp_difference
         #df = df[df['core_delay'] >= 0]
         df['core_delay_perc'] = timestamp_difference / df['e2e_delay']
+
+    filtered_df = df[df['core_delay'] < 0]
+    if filtered_df.shape[0] > 0:
+        logger.warning(f"{filtered_df.shape[0]} out of {df.shape[0]} got filtered due to negative core delay")
     df = df[df['core_delay'] >= 0]
+    if df.shape[0] == 0:
+        return df;
     #print(len(df))
 
     ################### RAN Delay ###################
@@ -176,7 +199,13 @@ def process_ul_journeys(df, ignore_core=False, standalone=False):
         df['ran_delay'] = df['e2e_delay'] - df['core_delay']
     else:
         df['ran_delay'] = df['e2e_delay']
+
+    filtered_df = df[df['ran_delay'] < 0]
+    if filtered_df.shape[0] > 0:
+        logger.warning(f"{filtered_df.shape[0]} out of {df.shape[0]} got filtered due to negative ran delay")
     df = df[df['ran_delay'] >= 0]
+    if df.shape[0] == 0:
+        return df;
     #print(len(df))
 
     ################### Queuing Delay ###################
@@ -188,7 +217,13 @@ def process_ul_journeys(df, ignore_core=False, standalone=False):
     # Convert timestamps to milliseconds and calculate the difference
     timestamp_difference = (timestamp1 - timestamp2) * 1000
     df['queuing_delay'] = timestamp_difference
+    filtered_df = df[df['queuing_delay'] < 0]
+    if filtered_df.shape[0] > 0:
+        logger.warning(f"{filtered_df.shape[0]} out of {df.shape[0]} got filtered due to negative queuing delay")
     df = df[df['queuing_delay'] >= 0]
+    if df.shape[0] == 0:
+        return df;
+
     df['queuing_delay_perc'] = timestamp_difference / df['e2e_delay']
     #print(len(df))
 
@@ -201,11 +236,26 @@ def process_ul_journeys(df, ignore_core=False, standalone=False):
     # Convert timestamps to milliseconds and calculate the difference
     timestamp_difference = (timestamp2 - timestamp1) * 1000
     df['link_delay'] = timestamp_difference
+    filtered_df = df[df['link_delay'] < 0]
+    if filtered_df.shape[0] > 0:
+        logger.warning(f"{filtered_df.shape[0]} out of {df.shape[0]} got filtered due to negative link delay")
     df = df[df['link_delay'] >= 0]
+    if df.shape[0] == 0:
+        return df;
+
     df['link_delay_perc'] = timestamp_difference / df['e2e_delay']
     #print(len(df))
 
     ################### Transmission delay ###################
+    # filter the rows where their number of segments on UE is not matched with gnb:
+    # 'rlc.reassembled.num_segments' != 'rlc.queue.segments.num_segments'
+    filtered_df = df[df['rlc.reassembled.num_segments'] != df['rlc.queue.segments.num_segments']]
+    if filtered_df.shape[0] > 0:
+        logger.warning(f"{filtered_df.shape[0]} out of {df.shape[0]} got filtered due to the number of segments on UE is not matched with gnb")
+    df = df[df['rlc.reassembled.num_segments'] == df['rlc.queue.segments.num_segments']]
+    if df.shape[0] == 0:
+        return df;
+
     # find the segment with longest tx+retx (service) delay, then store its gnb index
     df['max_service_delay_segment_gnb_idx'] = df.apply(get_max_service_delay_segment_gnb_idx, axis=1)
 
@@ -213,20 +263,38 @@ def process_ul_journeys(df, ignore_core=False, standalone=False):
     df['transmission_delay'] = df.apply(get_max_service_delay_segment_tx_delay, axis=1)
 
     # Remove rows where 'transmission_delay' is less than 0
+    filtered_df = df[df['transmission_delay'] < 0]
+    if filtered_df.shape[0] > 0:
+        logger.warning(f"{filtered_df.shape[0]} out of {df.shape[0]} got filtered due to negative transmission delay")
     df = df[df['transmission_delay'] >= 0]
+    if df.shape[0] == 0:
+        return df;
+
     df['transmission_delay_perc'] = timestamp_difference / df['e2e_delay']
     #print(len(df))
 
     ################### Retransmissions delay ###################
     # save the retx delay of the previously discovered segment as the retransmission delay
     df['retransmission_delay'] = df.apply(get_max_service_delay_segment_retx_delay, axis=1)
+    filtered_df = df[df['retransmission_delay'] < 0]
+    if filtered_df.shape[0] > 0:
+        logger.warning(f"{filtered_df.shape[0]} out of {df.shape[0]} got filtered due to negative retransmission delay")
     df = df[df['retransmission_delay'] >= 0]
+    if df.shape[0] == 0:
+        return df;
+
     df['retransmission_delay_perc'] = df['retransmission_delay'] / df['e2e_delay']
     #print(len(df))
 
     ################### Segmentation delay ###################
     df['segmentation_delay'] = df['link_delay']-(df['transmission_delay']+df['retransmission_delay'])
+    filtered_df = df[df['segmentation_delay'] < 0]
+    if filtered_df.shape[0] > 0:
+        logger.warning(f"{filtered_df.shape[0]} out of {df.shape[0]} got filtered due to negative segmentation delay")
     df = df[df['segmentation_delay'] >= 0]
+    if df.shape[0] == 0:
+        return df;
+
     df['segmentation_delay_perc'] = df['segmentation_delay'] / df['e2e_delay']
     #print(len(df))
 
