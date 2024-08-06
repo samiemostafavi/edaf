@@ -83,14 +83,14 @@ if __name__ == "__main__":
                 decoded_slot_column = f'rlc.reassembled.{seg}.mac.demuxed.mac.decoded.{int(hqround_value)}.timestamp'
                 return row[decoded_slot_column]
             else:
-                return np.NaN
+                return np.nan
         else:
             hqround_value = row[f"rlc.reassembled.{row['rlc.reassembled.num_segments']}.mac.demuxed.hqround"]
             if hqround_value >= 0:
                 decoded_slot_column = f"rlc.reassembled.{row['rlc.reassembled.num_segments']}.mac.demuxed.mac.decoded.{int(hqround_value)}.timestamp"
                 return row[decoded_slot_column]
             else:
-                return np.NaN
+                return np.nan
     for seg in range(MAX_SEGMENTS):
         if f'rlc.reassembled.{seg}.mac.demuxed.mac.decoded.0.timestamp' in df:
             df[f'rlc.reassembled.{seg}.mac.demuxed.mac.decoded.first.timestamp'] = df.apply(get_first_hqround_rx_ts, args=(seg,), axis=1)

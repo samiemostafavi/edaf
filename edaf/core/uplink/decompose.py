@@ -41,14 +41,14 @@ def get_first_hqround_rx_ts(row,seg):
             decoded_slot_column = f'rlc.reassembled.{seg}.mac.demuxed.mac.decoded.{int(hqround_value)}.timestamp'
             return row[decoded_slot_column]
         else:
-            return np.NaN
+            return np.nan
     else:
         hqround_value = row[f"rlc.reassembled.{row['rlc.reassembled.num_segments']}.mac.demuxed.hqround"]
         if hqround_value >= 0:
             decoded_slot_column = f"rlc.reassembled.{row['rlc.reassembled.num_segments']}.mac.demuxed.mac.decoded.{int(hqround_value)}.timestamp"
             return row[decoded_slot_column]
         else:
-            return np.NaN
+            return np.nan
 
 # Add a new column: last_segment_txpdu_ts
 def get_last_segment_txpdu_ts(row):
