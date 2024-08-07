@@ -52,13 +52,15 @@ Check influxdb UI on the browser: `http://192.168.32.140:8086`
 
 To run the modified gNodeB, in the config file e.g. `gnb.sa.band78.fr1.106PRB.usrpb210.conf` you need to add EDAF server address as:
 ```
-latseq_addr = "192.168.32.140:50015";
+edaf_addr = "192.168.32.140:50015";
+edaf_addr = "/tmp/edaf";
 ``` 
 Then run gNodeB and check EDAF logs whether it is connected or not.
 
 For UE, when in the arguments passing to the execution command, you have to pass EDAF address as:
 ```
---latseq-addr 192.168.32.140:50011
+--edaf-addr 192.168.32.140:50011
+--edaf-addr /tmp/edaf
 ```
 Then run UE and check EDAF logs whether it is connected or not.
 
