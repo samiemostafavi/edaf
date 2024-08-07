@@ -69,7 +69,7 @@ class CombineUL:
 
             for entry in uejourneys_data:
                 try:
-                    self.uejourneys_dict[entry['rlc.queue']['segments'][0]['rlc.txpdu']['sn']] = entry
+                    self.uejourneys_dict[entry['rlc.queue']['segments'][0]['rlc.txpdu']['srn']] = entry
                 except:
                     pass
 

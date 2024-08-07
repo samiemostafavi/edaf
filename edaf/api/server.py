@@ -11,7 +11,7 @@ from edaf.core.uplink.ue import ProcessULUE
 from edaf.core.uplink.nlmt import process_ul_nlmt
 from edaf.core.uplink.combine import CombineUL
 from edaf.core.uplink.decompose import process_ul_journeys
-from edaf.api.influx import InfluxClient
+from edaf.api.influx import InfluxClient, InfluxClientFULL
 
 MAX_L1_UPF_DEPTH = 1000 # lines
 MAX_L2_UPF_DEPTH = 100 # journeys
@@ -27,6 +27,41 @@ bucket = "latency"
 influx_db_address = "http://0.0.0.0:8086"
 auth_info_addr = "/EDAF/influx_auth.json"
 point_name = "packet_records"
+
+desired_fields = [
+    "rlc.reassembled.num_segments"
+    "core_delay",
+    "core_delay_perc",
+    "core_departure_time",
+    "e2e_delay",
+    "gtp.out.length",
+    "gtp.out.sn",
+    "ip.in.length",
+    "link_delay",
+    "link_delay_perc",
+    "queuing_delay",
+    "queuing_delay_perc",
+    "radio_arrival_time_os",
+    "radio_departure_time",
+    "radio_departure_time_os",
+    "ran_delay",
+    "retransmission_delay",
+    "retransmission_delay_perc",
+    "rlc.queue.queue",
+    "segmentation_delay",
+    "segmentation_delay_perc",
+    "seqno",
+    "service_time",
+    "service_time_os",
+    "service_time_seg1",
+    "service_time_seg1_os",
+    "service_time_seg2",
+    "service_time_seg2_os",
+    "service_time_seg3",
+    "service_time_seg3_os",
+    "transmission_delay",
+    "transmission_delay_perc"
+]
 
 class RingBuffer:
     def __init__(self, size):
@@ -73,7 +108,10 @@ async def process_queues(upf_rawdata_queue, gnb_rawdata_queue, ue_rawdata_queue,
     gnb_journeys_queue, ue_journeys_queue, gnbrdts, gnbproc, uerdts, ueproc = None, None, None, None, None, None
 
     if config["influx_token"]:
-        influx_cli = InfluxClient(influx_db_address, config["influx_token"], bucket, org, point_name)
+        if standalone:
+            influx_cli = InfluxClient(influx_db_address, config["influx_token"], bucket, org, point_name)
+        else:
+            influx_cli = InfluxClientFULL(influx_db_address, config["influx_token"], bucket, org, point_name, desired_fields)
         print("influxDB client initialized")
     else:
         influx_cli = None
@@ -137,6 +175,15 @@ async def process_queues(upf_rawdata_queue, gnb_rawdata_queue, ue_rawdata_queue,
                         ue_journeys_queue.pop_items(ue_jrny_len)
                     )
                     df = process_ul_journeys(df)
+                    if df is not None:
+                        if len(df)>0:
+                            # print(df)
+                            logger.debug(f"Pushing {len(df)} packet records to the database")
+                            # push df to influxdb
+                            if influx_cli:
+                                influx_cli.push_dataframe(df)
+                            else:
+                                logger.warning(f"Failed to push {len(df)} packet records to the database as influx cli is not setup.")
             else:
                 upf_jrny_len = upf_journeys_queue.get_length()
                 if upf_jrny_len > 20:
@@ -149,9 +196,13 @@ async def process_queues(upf_rawdata_queue, gnb_rawdata_queue, ue_rawdata_queue,
                     if df is not None:
                         if len(df)>0:
                             # print(df)
+                            logger.debug(f"Pushing {len(df)} packet records to the database")
                             # push df to influxdb
                             if influx_cli:
                                 influx_cli.push_dataframe(df)
+                            else:
+                                logger.warning(f"Failed to push {len(df)} packet records to the database as influx cli is not setup.")
+
                             
 
     except asyncio.CancelledError:

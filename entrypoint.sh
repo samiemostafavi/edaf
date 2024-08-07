@@ -12,6 +12,7 @@ influx setup \
   --password 4c5f28e30698bf883e18193 \
   --org expeca \
   --bucket latency \
+  --retention 0 \
   --force
 
 # read the authentication info including the token

@@ -12,8 +12,8 @@ SLOT_DUR = 0.5 # ms
 def get_num_segments_gnb(row):
     last_seg = 0
     for i in range(MAX_SEGMENTS):
-        if f'rlc.reassembled.{i}.mac.demuxed.hqround' in row:
-            if row[f'rlc.reassembled.{i}.mac.demuxed.hqround'] > 0:
+        if f'rlc.reassembled.{i}.mac.demuxed.timestamp' in row:
+            if row[f'rlc.reassembled.{i}.mac.demuxed.timestamp'] > 0:
                 last_seg = i
     return last_seg
 
@@ -252,6 +252,7 @@ def process_ul_journeys(df, ignore_core=False, standalone=False):
     filtered_df = df[df['rlc.reassembled.num_segments'] != df['rlc.queue.segments.num_segments']]
     if filtered_df.shape[0] > 0:
         logger.warning(f"{filtered_df.shape[0]} out of {df.shape[0]} got filtered due to the number of segments on UE is not matched with gnb")
+    
     df = df[df['rlc.reassembled.num_segments'] == df['rlc.queue.segments.num_segments']]
     if df.shape[0] == 0:
         return df;
