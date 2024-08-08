@@ -1,9 +1,7 @@
-import threading
+import threading, traceback, time, os, json, asyncio, multiprocessing, queue
 from collections import deque
 from loguru import logger
-import asyncio
-import os
-import json
+from multiprocessing import Process, Queue
 
 from edaf.core.common.timestamp import rdtsctotsOnline
 from edaf.core.uplink.gnb import ProcessULGNB
@@ -15,12 +13,19 @@ from edaf.api.influx import InfluxClient, InfluxClientFULL
 
 MAX_L1_UPF_DEPTH = 1000 # lines
 MAX_L2_UPF_DEPTH = 100 # journeys
+JOURNEYS_THRESHOLD_UPF = 30
 
 MAX_L1_GNB_DEPTH = 1000 # lines
 MAX_L2_GNB_DEPTH = 100 # journeys
+RAW_LINES_THRESHOLD_GNB = 500
+JOURNEYS_THRESHOLD_GNB = 30
 
 MAX_L1_UE_DEPTH = 1000 # lines
 MAX_L2_UE_DEPTH = 100 # journeys
+RAW_LINES_THRESHOLD_UE = 500
+JOURNEYS_THRESHOLD_UE = 30
+
+LOGGING_PERIOD_SEC = 2
 
 org = "expeca"
 bucket = "latency"
@@ -89,128 +94,160 @@ class RingBuffer:
             for _ in range(min(n, len(self.buffer))):
                 popped_items.append(self.buffer.popleft())
             return popped_items
-        
+
     def get_length(self):
         with self.lock:
             return len(self.buffer)
 
+def pop_q_items(items_queue : multiprocessing.Queue, num_items):                
+    items = []
+    while len(items) != num_items:
+        items.append(items_queue.get())
+    return items
 
-async def process_queues(upf_rawdata_queue, gnb_rawdata_queue, ue_rawdata_queue, config):
+def combine_journeys(upf_journeys_queue, gnb_journeys_queue, ue_journeys_queue, config):
 
     # set standalone var
-    if (gnb_rawdata_queue is None) or (ue_rawdata_queue is None):
+    if (gnb_journeys_queue is None) and (ue_journeys_queue is None):
         standalone = True
     else:
         standalone = False
 
-    upf_journeys_queue = RingBuffer(MAX_L2_UPF_DEPTH)
     combineul = CombineUL(standalone=standalone)
-    gnb_journeys_queue, ue_journeys_queue, gnbrdts, gnbproc, uerdts, ueproc = None, None, None, None, None, None
 
     if config["influx_token"]:
         if standalone:
             influx_cli = InfluxClient(influx_db_address, config["influx_token"], bucket, org, point_name)
         else:
             influx_cli = InfluxClientFULL(influx_db_address, config["influx_token"], bucket, org, point_name, desired_fields)
-        print("influxDB client initialized")
+        logger.info("[combine journeys] influxDB client initialized")
     else:
         influx_cli = None
-        print("influxDB client None")
+        logger.warning("[combine journeys] influxDB client NONE")
 
-    if not standalone:
-        gnb_journeys_queue = RingBuffer(MAX_L2_GNB_DEPTH)
-        ue_journeys_queue = RingBuffer(MAX_L2_UE_DEPTH)
-        gnbrdts = rdtsctotsOnline("GNB")
-        gnbproc = ProcessULGNB()
-        uerdts = rdtsctotsOnline("UE")
-        ueproc = ProcessULUE()
-        
-    try:
-        while True:
-            await asyncio.sleep(0.1)
-            upf_queue_length = upf_rawdata_queue.get_length()
-            if not standalone:
-                gnb_queue_length = gnb_rawdata_queue.get_length()
-                ue_queue_length = ue_rawdata_queue.get_length()
-            else:
-                gnb_queue_length, ue_queue_length = 0,0
-            
-            #logger.info(f"Queue lengths: UPF={upf_queue_length}, GNB={gnb_queue_length}, UE={ue_queue_length}")
-
-            # NLMT
-            if upf_queue_length > 0:
-                lines = upf_rawdata_queue.pop_items(upf_queue_length)
-                nlmt_journeys = process_ul_nlmt(lines)
-                for journey in nlmt_journeys:
-                    upf_journeys_queue.append(journey)
-
-            # GNB
-            if gnb_queue_length > 500:
-                lines = gnb_rawdata_queue.pop_items(gnb_queue_length)
-                l1linesgnb = gnbrdts.return_rdtsctots(lines)
-                if len(l1linesgnb) > 0:
-                    gnb_journeys = gnbproc.run(l1linesgnb)
-                    for journey in gnb_journeys:
-                        gnb_journeys_queue.append(journey)
-
-            # UE
-            if ue_queue_length > 500:
-                lines = ue_rawdata_queue.pop_items(ue_queue_length)
-                l1linesue = uerdts.return_rdtsctots(lines)
-                l1linesue.reverse()
-                if len(l1linesue) > 0:
-                    ue_journeys = ueproc.run(l1linesue)
-                    for journey in ue_journeys:
-                        ue_journeys_queue.append(journey)
+    logger.info(f"[combine journeys] process starts.")
     
+    while True:
+        try:
+            time.sleep(0.1)
             # Create e2e journeys
             if not standalone:
-                ue_jrny_len = ue_journeys_queue.get_length()
-                gnb_jrny_len = gnb_journeys_queue.get_length()
-                upf_jrny_len = upf_journeys_queue.get_length()
-                if ue_jrny_len > 20 and gnb_jrny_len > 20 and upf_jrny_len > 20:
-                    df = combineul.run(
-                        upf_journeys_queue.pop_items(upf_jrny_len),
-                        gnb_journeys_queue.pop_items(gnb_jrny_len),
-                        ue_journeys_queue.pop_items(ue_jrny_len)
-                    )
-                    df = process_ul_journeys(df)
-                    if df is not None:
-                        if len(df)>0:
-                            # print(df)
-                            logger.debug(f"Pushing {len(df)} packet records to the database")
-                            # push df to influxdb
-                            if influx_cli:
-                                influx_cli.push_dataframe(df)
-                            else:
-                                logger.warning(f"Failed to push {len(df)} packet records to the database as influx cli is not setup.")
+                upf_items = pop_q_items(upf_journeys_queue, JOURNEYS_THRESHOLD_UPF)
+                gnb_items = pop_q_items(gnb_journeys_queue, JOURNEYS_THRESHOLD_GNB)
+                ue_items = pop_q_items(ue_journeys_queue, JOURNEYS_THRESHOLD_UE)
+                df = combineul.run(
+                    upf_items,
+                    gnb_items,
+                    ue_items
+                )
+                df = process_ul_journeys(df)
             else:
-                upf_jrny_len = upf_journeys_queue.get_length()
-                if upf_jrny_len > 20:
-                    df = combineul.run(
-                        upf_journeys_queue.pop_items(upf_jrny_len),
-                        None,
-                        None,
-                    )
-                    df = process_ul_journeys(df,standalone=True)
-                    if df is not None:
-                        if len(df)>0:
-                            # print(df)
-                            logger.debug(f"Pushing {len(df)} packet records to the database")
-                            # push df to influxdb
-                            if influx_cli:
-                                influx_cli.push_dataframe(df)
-                            else:
-                                logger.warning(f"Failed to push {len(df)} packet records to the database as influx cli is not setup.")
+                upf_items = pop_q_items(upf_journeys_queue, JOURNEYS_THRESHOLD_UPF)
+                df = combineul.run(
+                    upf_items,
+                    None,
+                    None,
+                )
+                df = process_ul_journeys(df,standalone=True)
 
-                            
+            if df is not None:
+                if len(df)>0:
+                    # print(df)
+                    logger.debug(f"[combine journeys] Pushing {len(df)} packet records to the database")
+                    # push df to influxdb
+                    if influx_cli:
+                        influx_cli.push_dataframe(df)
+                    else:
+                        logger.warning(f"[combine journeys] Failed to push {len(df)} packet records to the database as influx cli is not setup.")
+        except Exception as ex:
+            logger.error(f"[combine journeys] {ex}")
+            logger.warning(traceback.format_exc())
 
-    except asyncio.CancelledError:
-        pass
+
+def queue_process(client_name, config, rawdata_queue, journeys_queue):
+
+    stats_dropped_lines = 0
+    stats_rcv_lines = 0
+    stats_published_journeys = 0
+    stats_dropped_journeys = 0
+    start_time = time.time()
+
+    if (rawdata_queue is None) or (journeys_queue is None):
+        return
+
+    if client_name == 'UE':
+        ITEMS_PROCESS_LIMIT = RAW_LINES_THRESHOLD_UE
+        rdts = rdtsctotsOnline("UE")
+        proc = ProcessULUE()
+    elif client_name == 'GNB':
+        ITEMS_PROCESS_LIMIT = RAW_LINES_THRESHOLD_GNB
+        rdts = rdtsctotsOnline("GNB")
+        proc = ProcessULGNB()
+    elif client_name == 'UPF':
+        ITEMS_PROCESS_LIMIT = 1
+        rdts = None
+        proc = None
+
+    logger.info(f"[{client_name} queue process] starts.")
+
+    raw_inputs = []
+    journeys = []
+    while True:
+        try:
+            try:
+                raw_inputs.append(rawdata_queue.get_nowait())
+            except queue.Empty:
+                pass
+
+            if len(raw_inputs) >= ITEMS_PROCESS_LIMIT:
+                # update stats
+                stats_rcv_lines = stats_rcv_lines + len(raw_inputs)
+                if client_name == 'UE' or client_name == 'GNB':
+                    l1lines = rdts.return_rdtsctots(raw_inputs)
+                    if client_name == 'UE':
+                        l1lines.reverse()
+                    if len(l1lines) > 0:
+                        journeys = proc.run(l1lines)
+                elif client_name == 'UPF':
+                    journeys = process_ul_nlmt(raw_inputs)
+                
+                raw_inputs = []
+                
+                #update stats
+                for journey in journeys:
+                    try:
+                        journeys_queue.put_nowait(journey)
+                        stats_published_journeys = stats_published_journeys + len(journeys)
+                    except queue.Full:
+                        # update stats
+                        stats_dropped_journeys = stats_dropped_journeys + 1
+
+                journeys = []
+
+            # print stats
+            current_time = time.time()
+            elapsed_time = current_time - start_time
+            if int(elapsed_time) >= LOGGING_PERIOD_SEC:
+                logger.info(f"[{client_name} queue process] received lines: {stats_rcv_lines}, dropped lines: {stats_dropped_lines}, published journeys: {stats_published_journeys}, dropped journeys: {stats_dropped_journeys}")
+                start_time = current_time
+
+        except Exception as ex:
+            logger.error(f"[{client_name} queue process] {ex}")
+            logger.warning(traceback.format_exc())
+            # update stats, clean the queues
+            stats_dropped_lines = stats_dropped_lines + len(raw_inputs)
+            stats_dropped_journeys = stats_dropped_journeys + len(journeys)
+            raw_inputs = []
+            journeys = []
+
 
 async def handle_client(reader, writer, client_name, config, rawdata_queue):
     init = True
     rem_str = ''
+    stats_dropped_lines = 0
+    stats_published_lines = 0
+    start_time = time.time()
+
     try:
         while True:
             data = await reader.read(512)
@@ -227,17 +264,34 @@ async def handle_client(reader, writer, client_name, config, rawdata_queue):
                     received_lines[0] = rem_str + received_lines[0]
                     rem_str = ''
                 for line in received_lines:
-                        rawdata_queue.append(line)
+                    if line != 'test':
+                        try:
+                            rawdata_queue.put_nowait(line)
+                            stats_published_lines = stats_published_lines + 1
+                        except queue.Full:
+                            stats_dropped_lines = stats_dropped_lines + 1
             else:
                 if '\n' in message:
                     received_lines = message.splitlines()
                     received_lines[0] = rem_str + received_lines[0]
                     rem_str = ''
                     for line in received_lines[:-1]:
-                            rawdata_queue.append(line)
+                        if line != 'test':
+                            try:
+                                rawdata_queue.put_nowait(line)
+                                stats_published_lines = stats_published_lines + 1
+                            except queue.Full:
+                                stats_dropped_lines = stats_dropped_lines + 1
                     rem_str = received_lines[-1]
                 else:
                     rem_str = rem_str + message
+
+            # print stats
+            current_time = time.time()
+            elapsed_time = current_time - start_time
+            if int(elapsed_time) >= LOGGING_PERIOD_SEC:
+                logger.info(f"[{client_name} server] published lines: {stats_published_lines}, dropped lines: {stats_dropped_lines}")
+                start_time = current_time
             
     except asyncio.CancelledError:
         pass
@@ -245,7 +299,7 @@ async def handle_client(reader, writer, client_name, config, rawdata_queue):
         logger.warning(f"[{client_name} server] Closing the connection")
         writer.close()
 
-async def start_server(client_name, config, rawdata_queue):
+async def async_net_server(client_name, config, rawdata_queue):
     if rawdata_queue is None:
         return
 
@@ -260,11 +314,14 @@ async def start_server(client_name, config, rawdata_queue):
     async with server:
         await server.serve_forever()
 
-async def run_serve():
+def net_server(client_name, config, rawdata_queue):
+    asyncio.run(async_net_server(client_name, config, rawdata_queue))
+
+def serve():
 
     # get version
     from .. import __version__
-    print(f"Running EDAF server v{__version__}")
+    logger.info(f"[main] Running EDAF server v{__version__}")
 
     # get standalone env variable
     standalone_var_str = os.environ.get("STANDALONE")
@@ -273,7 +330,7 @@ async def run_serve():
     else:
         standalone = False
 
-    print(f"Standalone mode:{standalone}")
+    logger.info(f"[main] Standalone mode:{standalone}")
 
     # read influxtoken
     try:
@@ -294,9 +351,12 @@ async def run_serve():
             "BUFFER_SIZE": 1000
         }
     }
-    upf_rawdata_queue = RingBuffer(MAX_L1_UPF_DEPTH)
+    upf_rawdata_queue = Queue(MAX_L1_UPF_DEPTH)
+    upf_journeys_queue = Queue(MAX_L2_UPF_DEPTH)
     gnb_rawdata_queue = None
+    gnb_journeys_queue = None
     ue_rawdata_queue = None
+    ue_journeys_queue = None
 
     if not standalone:
         config = {
@@ -311,32 +371,78 @@ async def run_serve():
             }
         }
 
-        gnb_rawdata_queue = RingBuffer(MAX_L1_GNB_DEPTH)
-        ue_rawdata_queue = RingBuffer(MAX_L1_UE_DEPTH)
-
-    upftask = asyncio.create_task(start_server("UPF", config, upf_rawdata_queue))
-    gnbtask = asyncio.create_task(start_server("GNB", config, gnb_rawdata_queue))
-    uetask = asyncio.create_task(start_server("UE", config, ue_rawdata_queue))
-    processtask = asyncio.create_task(process_queues(upf_rawdata_queue, gnb_rawdata_queue, ue_rawdata_queue, config))
+        gnb_rawdata_queue = Queue(MAX_L1_GNB_DEPTH)
+        gnb_journeys_queue = Queue(MAX_L2_GNB_DEPTH)
+        ue_rawdata_queue = Queue(MAX_L1_UE_DEPTH)
+        ue_journeys_queue = Queue(MAX_L2_UE_DEPTH)
 
     try:
-        await asyncio.gather(upftask, gnbtask, uetask, processtask)
-    except KeyboardInterrupt:
-        # Cancel the server tasks if the main thread is interrupted
-        upftask.cancel()
-        gnbtask.cancel()
-        uetask.cancel()
-        processtask.cancel()
-        try:
-            # Wait for the tasks to finish or raise the CancelledError
-            await asyncio.gather(upftask, gnbtask, uetask, processtask, return_exceptions=True)
-        except asyncio.CancelledError:
-            pass
+        # UPF
+        upf_server = Process(target=net_server, args=("UPF", config, upf_rawdata_queue),daemon=True)
+        upf_qprocess = Process(target=queue_process, args=("UPF", config, upf_rawdata_queue, upf_journeys_queue),daemon=True)
 
-def serve():
+        # GNB
+        gnb_server = Process(target=net_server, args=("GNB", config, gnb_rawdata_queue),daemon=True)
+        gnb_qprocess = Process(target=queue_process, args=("GNB", config, gnb_rawdata_queue, gnb_journeys_queue),daemon=True)
 
-    try:
-        asyncio.run(run_serve())
+        # UE
+        ue_server = Process(target=net_server, args=("UE", config, ue_rawdata_queue),daemon=True)
+        ue_qprocess = Process(target=queue_process, args=("UE", config, ue_rawdata_queue, ue_journeys_queue),daemon=True)
+
+        # COMBINE
+        combine_process = Process(target=combine_journeys, args=(upf_journeys_queue, gnb_journeys_queue, ue_journeys_queue, config), daemon=True)
+        
+        # start
+        upf_server.start()
+        upf_qprocess.start()
+
+        gnb_server.start()
+        gnb_qprocess.start()
+
+        ue_server.start()
+        ue_qprocess.start()
+
+        combine_process.start()
+
+        # join
+        upf_server.join()
+        upf_qprocess.join()
+
+        gnb_server.join()
+        gnb_qprocess.join()
+
+        ue_server.join()
+        ue_qprocess.join()
+
+        combine_process.join()
+
     except KeyboardInterrupt:
-        # Handle KeyboardInterrupt outside of asyncio.run
-        pass
+        logger.warning("Caught KeyboardInterrupt, terminating workers")
+
+        # terminate
+        upf_server.terminate()
+        upf_qprocess.terminate()
+
+        gnb_server.terminate()
+        gnb_qprocess.terminate()
+
+        ue_server.terminate()
+        ue_qprocess.terminate()
+        
+        combine_process.terminate()
+    else:
+        logger.warning("Termination")
+
+        # terminate
+        upf_server.terminate()
+        upf_qprocess.terminate()
+
+        gnb_server.terminate()
+        gnb_qprocess.terminate()
+
+        ue_server.terminate()
+        ue_qprocess.terminate()
+
+        combine_process.terminate()
+
+
