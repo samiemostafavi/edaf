@@ -12,7 +12,7 @@ To achieve that, EDAF
 
 For running EDAF experiments, 2 hosts and 2 USRP SDRs are required to bring up an standalone OpenAirInterface (OAI) 5G network:
 1. Core Network (CN) and gNB host + gnb SDR
-2. UE host + gnb SDR
+2. nrUE host + nrUE SDR
 
 They need to be connected via a secondary out-of-band wired IP network that we call it edaf-net.
 
