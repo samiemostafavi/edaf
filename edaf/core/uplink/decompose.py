@@ -3,7 +3,7 @@ import math
 import pandas as pd
 from loguru import logger
 
-import os
+import os, sys
 if not os.getenv('DEBUG'):
     logger.remove()
     logger.add(sys.stdout, level="INFO")
