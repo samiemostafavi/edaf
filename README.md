@@ -116,7 +116,7 @@ NOTE: check first that you can ping the NLMT server machine (UPF, or ext-dn)
 ```
 wget https://raw.githubusercontent.com/samiemostafavi/nlmt/master/nlmt
 chmod +x /usr/local/bin/nlmt
-./nlmt client -i 10ms -l 500 
+ ./nlmt client --tripm=oneway -i 10ms -f 5ms -g edaf1/test -l 500 -m 1 -d 5m -o d --outdir=/tmp/ <NLMTSERVER_IP>
 ```
 
 ## Run EDAF Offline
