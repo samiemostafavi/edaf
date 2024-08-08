@@ -3,8 +3,10 @@ import re
 from loguru import logger
 from collections import deque
 
-#logger.remove()
-#logger.add(sys.stderr, level="INFO")
+import os
+if not os.getenv('DEBUG'):
+    logger.remove()
+    logger.add(sys.stdout, level="INFO")
 
 class RingBuffer:
     def __init__(self, size):

@@ -3,6 +3,11 @@ import math
 import pandas as pd
 from loguru import logger
 
+import os
+if not os.getenv('DEBUG'):
+    logger.remove()
+    logger.add(sys.stdout, level="INFO")
+
 MAX_SEGMENTS = 20
 MAX_HQROUND = 5
 RU_LATENCY_MS = 0.5 #ms

@@ -4,8 +4,10 @@ from loguru import logger
 from collections import OrderedDict
 import sys
 
-#logger.remove()
-#logger.add(sys.stderr, level="INFO")
+import os
+if not os.getenv('DEBUG'):
+    logger.remove()
+    logger.add(sys.stdout, level="INFO")
 
 TS_TIME_MARGIN = 0.0010 # 1ms
 DEFAULT_MAX_DEPTH = 500
