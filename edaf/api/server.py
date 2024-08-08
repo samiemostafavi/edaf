@@ -11,17 +11,17 @@ from edaf.core.uplink.combine import CombineUL
 from edaf.core.uplink.decompose import process_ul_journeys
 from edaf.api.influx import InfluxClient, InfluxClientFULL
 
-MAX_L1_UPF_DEPTH = 1000 # lines
-MAX_L2_UPF_DEPTH = 100 # journeys
+MAX_L1_UPF_DEPTH = 5000 # lines
+MAX_L2_UPF_DEPTH = 500 # journeys
 JOURNEYS_THRESHOLD_UPF = 20
 
-MAX_L1_GNB_DEPTH = 1000 # lines
-MAX_L2_GNB_DEPTH = 100 # journeys
+MAX_L1_GNB_DEPTH = 5000 # lines
+MAX_L2_GNB_DEPTH = 500 # journeys
 RAW_LINES_THRESHOLD_GNB = 500
 JOURNEYS_THRESHOLD_GNB = 20
 
-MAX_L1_UE_DEPTH = 1000 # lines
-MAX_L2_UE_DEPTH = 100 # journeys
+MAX_L1_UE_DEPTH = 5000 # lines
+MAX_L2_UE_DEPTH = 500 # journeys
 RAW_LINES_THRESHOLD_UE = 500
 JOURNEYS_THRESHOLD_UE = 20
 
@@ -113,6 +113,14 @@ def combine_journeys(upf_journeys_queue, gnb_journeys_queue, ue_journeys_queue, 
     else:
         standalone = False
 
+    stats_rcv_journeys_upf = 0
+    stats_rcv_journeys_ue = 0
+    stats_rcv_journeys_gnb = 0
+    stats_combined_journeys = 0
+    stats_decomposed_journeys = 0
+    stats_published_journeys = 0
+    start_time = time.time()
+
     combineul = CombineUL(standalone=standalone)
 
     if config["influx_token"]:
@@ -129,26 +137,39 @@ def combine_journeys(upf_journeys_queue, gnb_journeys_queue, ue_journeys_queue, 
     
     while True:
         try:
-            time.sleep(0.1)
-            # Create e2e journeys
             if not standalone:
                 upf_items = pop_q_items(upf_journeys_queue, JOURNEYS_THRESHOLD_UPF)
                 gnb_items = pop_q_items(gnb_journeys_queue, JOURNEYS_THRESHOLD_GNB)
                 ue_items = pop_q_items(ue_journeys_queue, JOURNEYS_THRESHOLD_UE)
+                stats_rcv_journeys_upf = stats_rcv_journeys_upf + len(upf_items)
+                stats_rcv_journeys_gnb = stats_rcv_journeys_gnb + len(gnb_items)
+                stats_rcv_journeys_ue = stats_rcv_journeys_ue + len(ue_items)
                 df = combineul.run(
                     upf_items,
                     gnb_items,
                     ue_items
                 )
+                stats_combined_journeys = stats_combined_journeys + len(df)
                 df = process_ul_journeys(df)
+                stats_decomposed_journeys = stats_decomposed_journeys + len(df)
             else:
                 upf_items = pop_q_items(upf_journeys_queue, JOURNEYS_THRESHOLD_UPF)
+                stats_rcv_journeys_upf = stats_rcv_journeys_upf + len(upf_items)
                 df = combineul.run(
                     upf_items,
                     None,
                     None,
                 )
+                stats_combined_journeys = stats_combined_journeys + len(df)
                 df = process_ul_journeys(df,standalone=True)
+                stats_decomposed_journeys = stats_decomposed_journeys + len(df)
+
+            # print stats
+            current_time = time.time()
+            elapsed_time = current_time - start_time
+            if int(elapsed_time) >= LOGGING_PERIOD_SEC:
+                logger.info(f"[combine journeys] received journeys: UPF {stats_rcv_journeys_upf}, GNB {stats_rcv_journeys_gnb}, UE {stats_rcv_journeys_ue}, combined journeys: {stats_combined_journeys}, decomposed journeys: {stats_decomposed_journeys}, published journeys: {stats_published_journeys}")
+                start_time = current_time
 
             if df is not None:
                 if len(df)>0:
@@ -157,6 +178,7 @@ def combine_journeys(upf_journeys_queue, gnb_journeys_queue, ue_journeys_queue, 
                     # push df to influxdb
                     if influx_cli:
                         influx_cli.push_dataframe(df)
+                        stats_published_journeys = stats_published_journeys + len(df)
                     else:
                         logger.warning(f"[combine journeys] Failed to push {len(df)} packet records to the database as influx cli is not setup.")
         except Exception as ex:
