@@ -107,6 +107,18 @@ EDAF populates the influxDB, check the database's UI on port 8086 of CN+gNB host
 
 NOTE: if you specify a file address as above examples, it will write latseq files only without network connection.
 
+### Run NLMT client
+
+On the nrUE machine, after the connection to the 5G network is established, you must run NLMT client to produce periodic traffic towards NLMT server.
+NLMT client does not communicate with EDAF. 
+It's purpose is only producing traffic for NLMT server.
+NOTE: check first that you can ping the NLMT server machine (UPF, or ext-dn)
+```
+wget https://raw.githubusercontent.com/samiemostafavi/nlmt/master/nlmt
+chmod +x /usr/local/bin/nlmt
+./nlmt client -i 10ms -l 500 
+```
+
 ## Run EDAF Offline
 
 Instead of online networked mode, you can configure LATSEQ to produce `.lseq`, and NLMT to produce `.json.gz` files.
