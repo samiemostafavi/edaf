@@ -64,7 +64,7 @@ def find_MAC_DEC(hqpid_value,hqround,prev_lines,line_number):
                 logger.warning(f"For {KW_MAC_DEC} and {hqstr}, could not find timestamp or frame or slot in line {line_number-jd-1}.")
                 break
 
-            logger.debug(f"find '{KW_MAC_DEC}' and '{hqstr}' in line {line_number-jd-1}, timestamp: {timestamp}, frame: {fm_value}, slot: {sl_value}")
+            logger.debug(f"Found '{KW_MAC_DEC}' and '{hqstr}' in line {line_number-jd-1}, timestamp: {timestamp}, frame: {fm_value}, slot: {sl_value}")
             mac_dec_arr.append({
                 'timestamp':timestamp,
                 'frame':fm_value,

@@ -260,7 +260,10 @@ class ProcessULUE:
                                         'length' : len_value,
                                         'M2buf' : m2buf_value,
                                     }
-                                    m2bufp = f"M2buf{m2buf_value}"
+
+                                    # NOTE: M3buf should not necessarily be equal to M2buf. 
+                                    # It is important that [M2buf: M2buf+M2len] be inside [M3buf : M3buf+M3len].
+                                    m2len = len_value
                                     frmp = f"fm{fm_value}"
                                     slp = f"sl{sl_value}"
                                     found_MAC_1 = True
@@ -273,40 +276,48 @@ class ProcessULUE:
                             # Check RLC_decoded for each RLC_reassembeled
                             found_MAC_2 = False
                             for jd,prev_ljne in enumerate(prev_lines):
-                                if ("--"+KW_MAC_2 in prev_ljne) and (m2bufp in prev_ljne) and (frmp in prev_ljne) and (slp in prev_ljne):
+                                if ("--"+KW_MAC_2 in prev_ljne) and (frmp in prev_ljne) and (slp in prev_ljne):
                                     timestamp_match = re.search(r'^(\d+\.\d+)', prev_ljne)
                                     len_match = re.search(r'len(\d+)', prev_ljne)
                                     fm_match = re.search(r'fm(\d+)', prev_ljne)
                                     sl_match = re.search(r'sl(\d+)', prev_ljne)
                                     hqpid_match = re.search(r'hqpid(\d+)', prev_ljne)
+                                    m3buf_match = re.search(r'M3buf(\d+)', prev_ljne)
                                     hbuf_match = re.search(r'Hbuf(\d+)', prev_ljne)
-                                    if len_match and timestamp_match and fm_match and sl_match and hqpid_match and hbuf_match:
+                                    if len_match and timestamp_match and fm_match and sl_match and hqpid_match and m3buf_match and hbuf_match:
                                         timestamp = float(timestamp_match.group(1))
                                         len_value = int(len_match.group(1))
                                         fm_value = int(fm_match.group(1))
                                         sl_value = int(sl_match.group(1))
                                         hqpid_value = int(hqpid_match.group(1))
+                                        m3buf_value = int(m3buf_match.group(1))
                                         hbuf_value = int(hbuf_match.group(1))
                                     else:
                                         logger.warning(f"[UE] For {KW_MAC_2}, could not find properties in line {line_number-jd-1}. Skipping this '{KW_R}' journey")
                                         break
 
-                                    logger.debug(f"[UE] Found '{KW_MAC_2}', '{m2bufp}', and '{entnop}' in line {line_number-jd-1}, len:{len_value}, timestamp: {timestamp}, frame: {fm_value}, slot: {sl_value}")
+                                    # important check: only [M2buf: M2buf+M2len] must be inside [M3buf : M3buf+M3len]
+                                    # this is harq that can carry other drbs data
+                                    m3len = len_value
+                                    isInside = (m2buf_value >= m3buf_value) and ((m2buf_value + m2len) <= (m3buf_value + m3len))
+                                    if (isInside):
+                                        logger.debug(f"[UE] Found '{KW_MAC_2}', '{frmp}', and '{slp}' in a line where [M2buf: M2buf+M2len] was inside [M3buf : M3buf+M3len] {line_number-jd-1}, len:{len_value}, timestamp: {timestamp}, frame: {fm_value}, slot: {sl_value}")
 
-                                    mac_2_dict = {
-                                        'hqpid': hqpid_value,
-                                        'frame': fm_value,
-                                        'slot': sl_value,
-                                        'timestamp' : timestamp,
-                                        'length' : len_value,
-                                        'Hbuf' : hbuf_value,
-                                    }
-                                    hbufp = f"Hbuf{hbuf_value}"
-                                    found_MAC_2 = True
-                                    break
+                                        mac_2_dict = {
+                                            'hqpid': hqpid_value,
+                                            'frame': fm_value,
+                                            'slot': sl_value,
+                                            'timestamp' : timestamp,
+                                            'length' : len_value,
+                                            'M3buf' : m3buf_value,
+                                            'Hbuf' : hbuf_value,
+                                        }
+                                        hbufp = f"Hbuf{hbuf_value}"
+                                        found_MAC_2 = True
+                                        break
 
                             if not found_MAC_2:
-                                logger.warning(f"[UE] Could not find '{KW_MAC_2}', '{m2bufp}', '{frmp}', or '{slp}' in {len(prev_lines)} lines before {line_number}. MAC dicts of '{KW_R}' journey set empty.")
+                                logger.warning(f"[UE] Could not find '{KW_MAC_2}', M2buf'{m2buf_value}', '{frmp}', or '{slp}' in {len(prev_lines)} lines before {line_number} where [M2buf: M2buf+M2len] was inside [M3buf : M3buf+M3len]. MAC dicts of '{KW_R}' journey set empty.")
                                 mac_2_dict = {}
                                 mac_3_dict = {}
                             else:
