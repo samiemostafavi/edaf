@@ -99,9 +99,9 @@ class RingBuffer:
         with self.lock:
             return len(self.buffer)
 
-def pop_q_items(items_queue : multiprocessing.Queue, num_items):                
+def pop_q_items(items_queue : multiprocessing.Queue):                
     items = []
-    while len(items) != num_items:
+    while not items_queue.empty():
         items.append(items_queue.get())
     return items
 
@@ -136,11 +136,12 @@ def combine_journeys(upf_journeys_queue, gnb_journeys_queue, ue_journeys_queue, 
     logger.info(f"[combine journeys] process starts.")
     
     while True:
+        time.sleep(0.1)
         try:
             if not standalone:
-                upf_items = pop_q_items(upf_journeys_queue, JOURNEYS_THRESHOLD_UPF)
-                gnb_items = pop_q_items(gnb_journeys_queue, JOURNEYS_THRESHOLD_GNB)
-                ue_items = pop_q_items(ue_journeys_queue, JOURNEYS_THRESHOLD_UE)
+                upf_items = pop_q_items(upf_journeys_queue)
+                gnb_items = pop_q_items(gnb_journeys_queue)
+                ue_items = pop_q_items(ue_journeys_queue)
                 stats_rcv_journeys_upf = stats_rcv_journeys_upf + len(upf_items)
                 stats_rcv_journeys_gnb = stats_rcv_journeys_gnb + len(gnb_items)
                 stats_rcv_journeys_ue = stats_rcv_journeys_ue + len(ue_items)
@@ -239,7 +240,7 @@ def queue_process(client_name, config, rawdata_queue, journeys_queue):
                 for journey in journeys:
                     try:
                         journeys_queue.put_nowait(journey)
-                        stats_published_journeys = stats_published_journeys + len(journeys)
+                        stats_published_journeys = stats_published_journeys + 1
                     except queue.Full:
                         # update stats
                         stats_dropped_journeys = stats_dropped_journeys + 1

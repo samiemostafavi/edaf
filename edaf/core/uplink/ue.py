@@ -319,7 +319,7 @@ class ProcessULUE:
                                         break
 
                             if not found_MAC_2:
-                                logger.warning(f"[UE] Could not find '{KW_MAC_2}', M2buf'{m2buf_value}', '{frmp}', or '{slp}' in {len(prev_lines)} lines before {line_number} where [M2buf: M2buf+M2len] was inside [M3buf : M3buf+M3len]. MAC dicts of '{KW_R}' journey set empty.")
+                                logger.warning(f"[UE] Could not find '{KW_MAC_2}', '{frmp}', or '{slp}' in {len(prev_lines)} lines before {line_number} where [M2buf: M2buf+M2len] was inside [M3buf : M3buf+M3len]. MAC dicts of '{KW_R}' journey set empty.")
                                 mac_2_dict = {}
                                 mac_3_dict = {}
                             else:
