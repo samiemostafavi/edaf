@@ -103,7 +103,7 @@ Then run UE and check EDAF logs whether it is connected or not.
 
 Upon successful connection between gNB and UE, run the traffic generator NLMT client on UE host to generate packets on uplink.
 
-EDAF populates the influxDB, check the database's UI on port 8086 of CN+gNB host.
+EDAF populates the influxDB, check the database's UI on port 8086 of CN+gNB host. Login username is `edaf`, password is `4c5f28e30698bf883e18193`.
 
 NOTE: if you specify a file address as above examples, it will write latseq files only without network connection.
 
