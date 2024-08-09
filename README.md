@@ -212,9 +212,11 @@ If you have ssh access to all hosts, you can use the script `download_offline_fi
 
 
 ## Paper and Citation
-This repository contains the approach to analyze 5G end-to-end delay in this paper: ***EDAF: An End-to-End Delay Analytics Framework for 5G-and-Beyond Networks*** [here](https://arxiv.org/abs/2401.09856)
+This repository contains the approach to analyze 5G end-to-end delay in this paper 
 
-If you use this work in your research, please cite our paper:
+***EDAF: An End-to-End Delay Analytics Framework for 5G-and-Beyond Networks*** [here](https://arxiv.org/abs/2401.09856)
+
+If you use this work in your research, please cite our paper
 ```
 @misc{mostafavi2024edafendtoenddelayanalytics,
       title={EDAF: An End-to-End Delay Analytics Framework for 5G-and-Beyond Networks}, 
