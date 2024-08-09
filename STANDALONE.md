@@ -1,5 +1,21 @@
 # Run EDAF Standalone
 
+## Run EDAF Standalone
+
+If you are interested in using EDAF over an arbitrary network link, and not OpenAirInterface, follow this section.
+In such a scenario, you will lose the decomposition capability and you can only analyze the end-to-end delay.
+The hosts are required to be clock synchronized.
+For running standalone EDAF experiments, 2 hosts are required:
+1. Server host
+2. Client host
+
+Follow the steps below to run EDAF in standalone configuration.
+
+Create a docker network to run server services on it:
+```
+docker network create --driver=bridge --subnet=10.89.89.0/24 --ip-range=10.89.89.0/24 --gateway=10.89.89.1 edaf-net
+```
+
 ### 1) Run EDAF Server
 
 Run EDAF on the server host by first creating a folder on the host for storing the database.
