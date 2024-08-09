@@ -166,21 +166,6 @@ This will create a `res.parquet` file next to the script. You can easily open pa
 
 If you have ssh access to all hosts, you can use the script `download_offline_files.sh` to copy the latest files to your machine. Remember to modify the script with correct IP addresses, ssh credentials, and file addresses.
 
-## Run EDAF Standalone
-
-If you are interested in using EDAF over an arbitrary network link, and not OpenAirInterface, follow this section.
-In such a scenario, you will lose the decomposition capability and you can only analyze the end-to-end delay.
-The hosts are required to be clock synchronized.
-For running standalone EDAF experiments, 2 hosts are required:
-1. Server host
-2. Client host
-
-Follow the steps below to run EDAF in standalone configuration.
-
-Create a docker network to run server services on it:
-```
-docker network create --driver=bridge --subnet=10.89.89.0/24 --ip-range=10.89.89.0/24 --gateway=10.89.89.1 edaf-net
-```
 
 ## Publications
 
