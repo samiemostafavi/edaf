@@ -256,7 +256,7 @@ def process_ul_journeys(df, ignore_core=False, standalone=False):
     # 'rlc.reassembled.num_segments' != 'rlc.queue.segments.num_segments'
     filtered_df = df[df['rlc.reassembled.num_segments'] != df['rlc.queue.segments.num_segments']]
     if filtered_df.shape[0] > 0:
-        logger.warning(f"{filtered_df.shape[0]} out of {df.shape[0]} got filtered due to the number of segments on UE is not matched with gnb")
+        logger.warning(f"{filtered_df.shape[0]} out of {df.shape[0]} got filtered due to the number of segments on UE was not matched with gnb")
     
     df = df[df['rlc.reassembled.num_segments'] == df['rlc.queue.segments.num_segments']]
     if df.shape[0] == 0:

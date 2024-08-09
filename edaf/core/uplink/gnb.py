@@ -31,7 +31,9 @@ KW_SDAP = 'sdap.sdu'
 
 # go back more lines, find the first line that includes
 KW_PDCP = 'pdcp.decoded'
-# and 'snXX'. In this line, check lenYY
+
+# go back more lines, find the first line that includes
+KW_PDCPIND = 'pdcp.ind'
 
 # go back more lines, find all lines that include
 KW_RLC = 'rlc.reassembled'
@@ -106,24 +108,24 @@ class ProcessULGNB:
                 # Use regular expressions to extract the numbers
                 timestamp_match = re.search(r'^(\d+\.\d+)', line)
                 len_match = re.search(r'len(\d+)', line)
+                sbuf_match = re.search(r'SBuf(\d+)', line)
                 sn_match = re.search(r'sn(\d+)', line)
-
-                if len_match and sn_match and timestamp_match:
-
+                if len_match and sbuf_match and timestamp_match and sn_match:
                     timestamp = float(timestamp_match.group(1))
                     len_value = int(len_match.group(1))
+                    sbuf_value = sbuf_match.group(1)
                     sn_value = int(sn_match.group(1))
-
-                    logger.debug(f"[GNB] Found '{KW_R}' in line {line_number}, len:{len_value}, sn: {sn_value}, ts: {timestamp}")
-
+                    logger.debug(f"[GNB] Found '{KW_R}' in line {line_number}, len:{len_value}, SBuf: {sbuf_value}, ts: {timestamp}, sn: {sn_value}")
                     journey = {
                         KW_R : {
                             'timestamp' : timestamp,
                             'length' : len_value,
+                            'SBuf' : sbuf_value,
                             'sn' : sn_value
                         }
                     }
-                    sngtp = f"sn{sn_value}"
+                    snp = f"sn{sn_value}"
+                    sbufp = f"SBuf{sbuf_value}"
 
                     # lets go back in lines
                     prev_lines = self.previous_lines.reverse_items()
@@ -131,60 +133,92 @@ class ProcessULGNB:
                     # check for KW_SDAP
                     found_KW_SDAP = False
                     for id,prev_line in enumerate(prev_lines):    
-                        if ('--'+KW_SDAP in prev_line) and (sngtp in prev_line):
-                            
+                        if ('--'+KW_SDAP in prev_line) and (sbufp in prev_line) and (snp in prev_line):
                             timestamp_match = re.search(r'^(\d+\.\d+)', prev_line)
                             len_match = re.search(r'len(\d+)', prev_line)
-                            if len_match and timestamp_match:
+                            pbuf_match = re.search(r'PBuf(\d+)', prev_line)
+                            if len_match and timestamp_match and pbuf_match:
                                 timestamp = float(timestamp_match.group(1))
                                 len_value = int(len_match.group(1))
+                                pbuf_value = pbuf_match.group(1)
                             else:
-                                logger.warning(f"[GNB] For {KW_SDAP}, could not find timestamp or length in line {line_number-id-1}. Skipping this '{KW_R}' journey")
+                                logger.warning(f"[GNB] For {KW_SDAP}, could not find timestamp, length, or PBuf in line {line_number-id-1}. Skipping this '{KW_R}' journey")
                                 break
 
-                            logger.debug(f"[GNB] Found '{KW_SDAP}' and '{sngtp}' in line {line_number-id-1}, len:{len_value}, timestamp: {timestamp}")
+                            logger.debug(f"[GNB] Found '{KW_SDAP}','{sbufp}', and '{snp}' in line {line_number-id-1}, len:{len_value}, timestamp: {timestamp}")
                             journey[KW_SDAP] = {
                                 'timestamp' : timestamp,
                                 'length' : len_value,
+                                'PBuf' : pbuf_value,
                             }
+                            pbufp = f"PBuf{pbuf_value}"
                             found_KW_SDAP = True
                             break
 
                     if not found_KW_SDAP:
-                        logger.warning(f"[GNB] Could not find '{KW_SDAP}' and '{sngtp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
+                        logger.warning(f"[GNB] Could not find '{KW_SDAP}' and '{sbufp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
                         continue
 
                     # check for KW_PDCP
                     found_KW_PDCP = False
                     for id,prev_line in enumerate(prev_lines):
-                        if ('--'+KW_PDCP in prev_line) and (sngtp in prev_line):
+                        if ('--'+KW_PDCP in prev_line) and (pbufp in prev_line) and (snp in prev_line):
                             timestamp_match = re.search(r'^(\d+\.\d+)', prev_line)
                             len_match = re.search(r'len(\d+)', prev_line)
-                            if len_match and timestamp_match:
+                            pibuf_match = re.search(r'PIBuf(\d+)', prev_line)
+                            if len_match and timestamp_match and pibuf_match:
+                                timestamp = float(timestamp_match.group(1))
+                                len_value = int(len_match.group(1))
+                                pibuf_value = pibuf_match.group(1)
+                            else:
+                                logger.warning(f"[GNB] For {KW_PDCP}, could not find timestamp, length, PIBuf, or sn in line {line_number-id-1}. Skipping this '{KW_R}' journey")
+                                break
+
+                            logger.debug(f"[GNB] Found '{KW_PDCP}', '{pbufp}', and '{snp}' in line {line_number-id-1}, len:{len_value}, timestamp: {timestamp}, sn: {sn_value}")
+                            journey[KW_PDCP] = {
+                                'timestamp' : timestamp,
+                                'length' : len_value,
+                                'PIBuf' : pibuf_value,
+                            }
+                            pibufp = f"PIBuf{pibuf_value}"
+                            found_KW_PDCP = True
+                            break
+                    
+                    if not found_KW_PDCP:
+                        logger.warning(f"[GNB] Could not find '{KW_PDCP}' and '{pbufp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
+                        continue
+
+                    # check for KW_PDCPIND
+                    # This is tricky. We may find multiple lines we have to keep the one with smaller snp
+                    found_KW_PDCPIND = False
+                    for id,prev_line in enumerate(prev_lines):
+                        if ('--'+KW_PDCPIND in prev_line) and (pibufp in prev_line) and (snp in prev_line):
+                            timestamp_match = re.search(r'^(\d+\.\d+)', prev_line)
+                            len_match = re.search(r'len(\d+)', prev_line)
+                            if len_match and timestamp_match and sn_match:
                                 timestamp = float(timestamp_match.group(1))
                                 len_value = int(len_match.group(1))
                             else:
-                                logger.warning(f"[GNB] For {KW_PDCP}, could not find timestamp or length in in line {line_number-id-1}. Skipping this '{KW_R}' journey")
+                                logger.warning(f"[GNB] For {KW_PDCPIND}, could not find timestamp, or length in in line {line_number-id-1}. Skipping this '{KW_R}' journey")
                                 break
 
-                            logger.debug(f"[GNB] Found '{KW_PDCP}' and '{sngtp}' in line {line_number-id-1}, len:{len_value}, timestamp: {timestamp}")
-                            journey[KW_PDCP] = {
+                            logger.debug(f"[GNB] Found '{KW_PDCPIND}', '{pibufp}', and '{snp}' in line {line_number-id-1}, len:{len_value}, timestamp: {timestamp}")
+                            journey[KW_PDCPIND] = {
                                 'timestamp' : timestamp,
                                 'length' : len_value,
                             }
                             found_KW_PDCP = True
                             break
-                    
-                    if not found_KW_PDCP:
-                        logger.warning(f"[GNB] Could not find '{KW_PDCP}' and '{sngtp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
-                        continue
 
+                    if not found_KW_PDCP:
+                        logger.warning(f"[GNB] Could not find '{KW_PDCPIND}', '{pibufp}', or '{entnop}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
+                        continue
                     
                     # check for KW_RLC
                     RLC_ARR = []
                     lengths = []
                     for id,prev_line in enumerate(prev_lines):
-                        if ('--'+KW_RLC in prev_line) and (sngtp in prev_line):
+                        if ('--'+KW_RLC in prev_line) and (snp in prev_line):
                             timestamp_match = re.search(r'^(\d+\.\d+)', prev_line)
                             len_match = re.search(r'len(\d+)', prev_line)
                             mrbuf_match = re.search(r'MRbuf(\d+)\.', prev_line)
@@ -196,7 +230,7 @@ class ProcessULGNB:
                                 logger.warning(f"[GNB] For {KW_RLC}, could not find timestamp, length, or MRBuf in in line {line_number-id-1}. Skipping this '{KW_R}' journey")
                                 break
 
-                            logger.debug(f"[GNB] Found '{KW_RLC}' and '{sngtp}' in line {line_number-id-1}, len:{len_value}, timestamp: {timestamp}, MRBuf:{mrbuf_value}")
+                            logger.debug(f"[GNB] Found '{KW_RLC}' and '{snp}' in line {line_number-id-1}, len:{len_value}, timestamp: {timestamp}, MRBuf:{mrbuf_value}")
                             lengths.append(len_value)
                             rlc_reass_dict = {
                                 'MRbuf': mrbuf_value,
