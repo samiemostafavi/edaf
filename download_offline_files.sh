@@ -4,13 +4,13 @@
 timestamp=$(date +'%y%m%d_%H%M%S')
 
 # Create the main results folder
-results_folder="${timestamp}_results"
-mkdir "$results_folder"
+results_folder="results/${timestamp}_results"
+mkdir -p "$results_folder"
 
 # Create subfolders inside the results folder
-mkdir "${results_folder}/gnb"
-mkdir "${results_folder}/ue"
-mkdir "${results_folder}/upf"
+mkdir -p "${results_folder}/gnb"
+mkdir -p "${results_folder}/ue"
+mkdir -p "${results_folder}/upf"
 
 # Function to copy the latest *.lseq file from a server to the corresponding folder
 copy_lseq_file() {
@@ -19,7 +19,7 @@ copy_lseq_file() {
     local password="$3"
     local destination_folder="$4"
 
-    latest_lseq=$(sshpass -p "$password" ssh "$user@$server_ip" "ls -t /tmp/*.lseq | head -n 1")
+    latest_lseq=$(sshpass -p "$password" ssh -o StrictHostKeyChecking=no "$user@$server_ip" "ls -t /tmp/*.lseq | head -n 1")
     # Copy the latest *.lseq file using scp
     sshpass -p "$password" scp -r "$user@$server_ip:$latest_lseq" "$destination_folder"
     echo "$destination_folder/$(basename $latest_lseq)"
@@ -39,14 +39,14 @@ copy_json_file() {
     echo "$destination_folder/$(basename $latest_json)"
 }
 
-# Copy the latest *.lseq file from gnb (192.168.2.2) to the gnb folder
-gnb_file=$(copy_lseq_file "192.168.2.2" "wlab" "wlab" "${results_folder}/gnb")
+# Copy the latest *.lseq file from the remote gnb machine to the gnb folder
+gnb_file=$(copy_lseq_file "130.237.11.116" "root" "expeca" "${results_folder}/gnb")
 echo "Copied gnb file: $gnb_file"
 
-# Copy the latest *.lseq file from ue (192.168.1.1) to the ue folder
-ue_file=$(copy_lseq_file "192.168.1.1" "wlab" "wlab" "${results_folder}/ue")
+# Copy the latest *.lseq file from the remote ue machine to the ue folder
+ue_file=$(copy_lseq_file "130.237.11.115" "root" "expeca" "${results_folder}/ue")
 echo "Copied ue file: $ue_file"
 
-# Copy the latest *.json file from UPF (192.168.2.3) to the UPF folder
-upf_file=$(copy_json_file "192.168.2.3" "wlab" "wlab" "m1/fingolfin" "${results_folder}/upf")
+# Copy the latest *.json file from the remote UPF machine to the upf folder
+upf_file=$(copy_json_file "130.237.11.116" "root" "expeca" "edaf/test" "${results_folder}/upf")
 echo "Copied UPF file: $upf_file"
