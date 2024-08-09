@@ -121,9 +121,9 @@ chmod +x /usr/local/bin/nlmt
 
 ## Run EDAF Offline
 
-Instead of online networked mode, you can configure LATSEQ to produce `.lseq`, and NLMT to produce `.json.gz` files.
+Instead of online networked mode, you can configure EDAF to produce `.lseq` files, and NLMT to produce `.json.gz` files.
 
-ُThis can be done on the RAN executables by setting a folder address as for edaf address:
+ُThis can be done on the RAN executables by setting a folder address as for the edaf address:
 ```
 gnb: edaf_addr = "/tmp/edaf";
 ue: --edaf-addr /tmp/edaf
