@@ -4,3 +4,4 @@ loguru
 pandas
 matplotlib
 asyncio
+pyarrow
