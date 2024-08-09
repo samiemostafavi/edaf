@@ -157,6 +157,8 @@ For example:
 python offline_edaf.py 240103_011728_FINAL_expB_Q1_results res.parquet
 ```
 
+If you have ssh access to all hosts, you can use the script `download_offline_files.sh` to copy the latest ones to your machine. Remember to modify the file with correct IP addresses and ssh username and password.
+
 ## Run EDAF Standalone
 
 If you are interested in using EDAF over an arbitrary network link, and not OpenAirInterface, follow this section.
