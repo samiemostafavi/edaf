@@ -210,7 +210,22 @@ This will create a `res.parquet` file next to the script.
 
 If you have ssh access to all hosts, you can use the script `download_offline_files.sh` to copy the latest files to your machine. Remember to modify the script with correct IP addresses, ssh credentials, and file addresses.
 
-## Publications
+
+## Paper and Citation
+This repository contains the approach to analyze 5G end-to-end delay in this paper: ***EDAF: An End-to-End Delay Analytics Framework for 5G-and-Beyond Networks*** [here](https://arxiv.org/abs/2401.09856)
+
+If you use this work in your research, please cite our paper:
+```
+@misc{mostafavi2024edafendtoenddelayanalytics,
+      title={EDAF: An End-to-End Delay Analytics Framework for 5G-and-Beyond Networks}, 
+      author={Samie Mostafavi and Marius Tillner and Gourav Prateek Sharma and James Gross},
+      year={2024},
+      eprint={2401.09856},
+      archivePrefix={arXiv},
+      primaryClass={cs.NI},
+      url={https://arxiv.org/abs/2401.09856}, 
+}
+```
 
 ## License
 
