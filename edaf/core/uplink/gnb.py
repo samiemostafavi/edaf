@@ -42,7 +42,7 @@ KW_MAC_DEM = 'mac.demuxed'
 KW_MAC_DEC = 'mac.decoded' # this is the key to recognize the retransmissions
 
 # maximum number of lines to check
-MAX_DEPTH = 100
+MAX_DEPTH = 1000
 
 
 def find_MAC_DEC(hqpid_value,hqround,prev_lines,line_number):
@@ -175,6 +175,8 @@ class ProcessULGNB:
                     
                     if not found_KW_PDCP:
                         logger.warning(f"[GNB] Could not find '{KW_PDCP}' and '{sngtp}' in {len(prev_lines)} lines before {line_number}. Skipping this '{KW_R}' journey")
+                        print(found_KW_PDCP, prev_line)
+                        #return
                         continue
 
                     

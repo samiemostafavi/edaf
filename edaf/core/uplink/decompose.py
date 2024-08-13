@@ -151,7 +151,6 @@ def process_ul_journeys(df, ignore_core=False, standalone=False):
     df['e2e_delay'] = timestamp_difference
     df = df[df['e2e_delay'] >= 0]
     #print(len(df))
-
     ################### Core Delay ###################
     if not ignore_core:
         # "rlc.queue.segments.0.rlc.txpdu.timestamp" - "rlc.queue.timestamp"
@@ -166,6 +165,7 @@ def process_ul_journeys(df, ignore_core=False, standalone=False):
         df['core_delay_perc'] = timestamp_difference / df['e2e_delay']
     df = df[df['core_delay'] >= 0]
     #print(len(df))
+
 
     ################### RAN Delay ###################
     if not ignore_core:

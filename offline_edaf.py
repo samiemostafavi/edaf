@@ -58,6 +58,8 @@ if __name__ == "__main__":
     folder_path = Path(sys.argv[1])
     result_parquet_file = Path(sys.argv[2])
 
+    print(folder_path, result_parquet_file)
+
     gnb_path = folder_path.joinpath("gnb")
     gnb_lseq_file = list(gnb_path.glob("latseq.*.lseq"))[0]
     logger.info(f"found gnb lseq file: {gnb_lseq_file}")
@@ -90,12 +92,12 @@ if __name__ == "__main__":
             nlmt_journeys[ind:ind+NUM_POP],
             gnb_journeys[ind:ind+NUM_POP],
         )
-        #df_combined.to_csv('out.csv')
         logger.info(f'Combined len: {len(df_combined)}')
-        ind += NUM_POP
         df_to_append = process_ul_journeys(df_combined)
+        df_to_append.to_csv('out2.csv')
         logger.info(f'Processed len: {len(df_to_append)}')
         df = pd.concat([df, df_to_append], ignore_index=True)
+        ind += NUM_POP
         if ind > len(nlmt_journeys) or ind > len(nlmt_journeys) or ind > len(nlmt_journeys):
             break
     # for i,l in enumerate(gnb_journeys):
@@ -110,4 +112,4 @@ if __name__ == "__main__":
 
     logger.info(f"Combines logs, created a df with {len(df)} entries.")
     df.to_parquet(result_parquet_file, engine='pyarrow')
-
+    df.to_csv('out.csv')

@@ -43,7 +43,7 @@ def closest_nlmt_entry_uplink(ue_timestamp, nlmt_dict):
     for seqno in nlmt_dict:
         entry = nlmt_dict[seqno]
         send_timestamp = entry['send.timestamp']
-        if abs(ue_timestamp-send_timestamp) < TS_TIME_MARGIN:
+        if np.abs(send_timestamp-ue_timestamp) < TS_TIME_MARGIN and send_timestamp<ue_timestamp:
             return seqno,entry
     return None,None
 
@@ -52,7 +52,7 @@ def closest_nlmt_entry_uplink_gnb(gnb_timestamp, nlmt_dict):
     for seqno in nlmt_dict:
         entry = nlmt_dict[seqno]
         receive_timestamp = entry['receive.timestamp']
-        if abs(receive_timestamp-gnb_timestamp) < TS_TIME_MARGIN:
+        if np.abs(receive_timestamp-gnb_timestamp) < TS_TIME_MARGIN and receive_timestamp>gnb_timestamp:
             return seqno,entry
     return None,None
 
@@ -136,7 +136,9 @@ class CombineUL:
                 del_arr.append(gnbkey)
                 del_arr_nlmt.append(nlmt_key)
             else:
-                logger.debug(f"Could not find gnb entry in nlmt for sn {gnbkey}")
+                # print(gnb_entry)
+                # return
+                logger.warning(f"Could not find gnb entry in nlmt for sn {gnbkey}")
         for delkey in del_arr:
             del self.gnbjourneys_dict[delkey]
 
