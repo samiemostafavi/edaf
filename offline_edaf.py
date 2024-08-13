@@ -50,15 +50,15 @@ if __name__ == "__main__":
     logger.remove()
     logger.add(sys.stdout, level="INFO")
 
-    if len(sys.argv) != 3:
-        logger.error("Usage: python offline_edaf.py <source_folder_address> <result_parquetfile>")
+    if len(sys.argv) != 4:
+        logger.error("Usage: python offline_edaf.py <source_folder_address> <result_parquetfile> <result_csvfile>")
         sys.exit(1)
 
     # Get the Parquet file name from the command-line argument
     folder_path = Path(sys.argv[1])
     result_parquet_file = Path(sys.argv[2])
-
-    print(folder_path, result_parquet_file)
+    result_csv_file = Path(sys.argv[3])
+    print(folder_path, result_parquet_file, result_csv_file)
 
     gnb_path = folder_path.joinpath("gnb")
     gnb_lseq_file = list(gnb_path.glob("latseq.*.lseq"))[0]
@@ -112,4 +112,4 @@ if __name__ == "__main__":
 
     logger.info(f"Combines logs, created a df with {len(df)} entries.")
     df.to_parquet(result_parquet_file, engine='pyarrow')
-    df.to_csv('out.csv')
+    df.to_csv(result_csv_file)
