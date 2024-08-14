@@ -134,8 +134,6 @@ source venv/bin/activate
 pip install -Ur requirements.txt
 ```
 
-NOTE: Python version must be greater or eqaul than 3.9
-
 ### 1) Run 5G Core and NLMT Server
 
 We start by running the 5G core services on CN host by following OpenAirInterface tutorials.
