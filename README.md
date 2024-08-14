@@ -127,10 +127,14 @@ After you saw 'connection established' here, EDAF server starts populating the i
 
 Instead of online networked mode, you can have a setup that works only with files. This requires running the `offline_edaf.py` python script so first setup a python 3.9 or higher environment and install the requirements:
 ```
+git clone https://github.com/samiemostafavi/edaf.git
+cd ~/edaf
 python3 -m virtualenv ./venv
 source venv/bin/activate
 pip install -Ur requirements.txt
 ```
+
+NOTE: Python version must be greater or eqaul than 3.9
 
 ### 1) Run 5G Core and NLMT Server
 
