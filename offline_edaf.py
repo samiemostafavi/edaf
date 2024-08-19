@@ -11,6 +11,7 @@ from edaf.core.uplink.combine import CombineUL
 from edaf.core.uplink.decompose import process_ul_journeys
 
 NUM_POP = 10000
+SLACK = 100
 
 # in case you have offline parquet journey files, you can use this script to decompose delay
 # pass the address of a folder in argv with the following structure:
@@ -89,12 +90,12 @@ if __name__ == "__main__":
     df = pd.DataFrame()
     while True:
         df_combined = combineul.run(
-            nlmt_journeys[ind:ind+NUM_POP],
+            nlmt_journeys[max(0, ind-SLACK):min(ind+NUM_POP+SLACK,len(nlmt_journeys))],
             gnb_journeys[ind:ind+NUM_POP],
         )
+        logger.info(f'Batch index: {ind}, Length of the batch: {len(df_combined)}')
         logger.info(f'Combined len: {len(df_combined)}')
-        df_to_append = process_ul_journeys(df_combined)
-        df_to_append.to_csv('out2.csv')
+        df_to_append = process_ul_journeys(df_combined, ignore_core=True)
         logger.info(f'Processed len: {len(df_to_append)}')
         df = pd.concat([df, df_to_append], ignore_index=True)
         ind += NUM_POP

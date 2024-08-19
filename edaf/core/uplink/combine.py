@@ -7,8 +7,8 @@ import sys
 #logger.remove()
 #logger.add(sys.stderr, level="INFO")
 
-TS_TIME_MARGIN = 0.0010 # 1ms
-DEFAULT_MAX_DEPTH = 500
+TS_TIME_MARGIN = 0.00090 # 500us
+DEFAULT_MAX_DEPTH = 1000
 
 class FixSizeOrderedDict(OrderedDict):
     def __init__(self, *args, max=0, **kwargs):
@@ -49,11 +49,16 @@ def closest_nlmt_entry_uplink(ue_timestamp, nlmt_dict):
 
 
 def closest_nlmt_entry_uplink_gnb(gnb_timestamp, nlmt_dict):
-    for seqno in nlmt_dict:
+    for seqno in sorted(nlmt_dict.keys(), reverse=True):
         entry = nlmt_dict[seqno]
         receive_timestamp = entry['receive.timestamp']
-        if np.abs(receive_timestamp-gnb_timestamp) < TS_TIME_MARGIN and receive_timestamp>gnb_timestamp:
+        if np.abs(receive_timestamp-gnb_timestamp) < TS_TIME_MARGIN:
             return seqno,entry
+            # if receive_timestamp>gnb_timestamp:
+            #     return seqno,entry
+            # if correct_nlmt_timestamp:
+            #     entry['receive.timestamp'] = gnb_timestamp
+            #     return seqno,entry
     return None,None
 
 class CombineUL:
@@ -81,7 +86,7 @@ class CombineUL:
             #         self.uejourneys_dict[entry['rlc.queue']['segments'][0]['rlc.txpdu']['sn']] = entry
             #     except:
             #         pass
-
+        #import pdb; pdb.set_trace()
         for entry in upfjourneys_data:
             # online data
             if 'st' in list(entry.keys()):
@@ -101,7 +106,7 @@ class CombineUL:
                         }
             else:
                 return None
-
+        #import pdb; pdb.set_trace()
         #logger.debug('---------------------')
         #logger.debug('gnb:')
         #logger.debug([item for item in self.gnbjourneys_dict.items()])
@@ -125,7 +130,7 @@ class CombineUL:
                 del self.nlmtjourneys_dict[delkey]
 
             return pd.DataFrame(combined_dict).T  # Transpose to have keys as columns
-
+        
         # Combine non-standalone
         for gnbkey in self.gnbjourneys_dict:
             gnb_entry = self.gnbjourneys_dict[gnbkey]   
@@ -136,9 +141,8 @@ class CombineUL:
                 del_arr.append(gnbkey)
                 del_arr_nlmt.append(nlmt_key)
             else:
-                # print(gnb_entry)
-                # return
                 logger.warning(f"Could not find gnb entry in nlmt for sn {gnbkey}")
+                #import pdb; pdb.set_trace()
         for delkey in del_arr:
             del self.gnbjourneys_dict[delkey]
 

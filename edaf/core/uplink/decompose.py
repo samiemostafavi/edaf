@@ -120,6 +120,7 @@ def process_ul_journeys(df, ignore_core=False, standalone=False):
         #df = df[df['e2e_delay'] >= 0]
         return df
     
+    
     ################### POST PROCESS ###################
     # find the number of segments for each packet
     df['rlc.reassembled.num_segments'] = df.apply(get_num_segments, axis=1)
@@ -163,9 +164,9 @@ def process_ul_journeys(df, ignore_core=False, standalone=False):
         df['core_delay'] = timestamp_difference
         #df = df[df['core_delay'] >= 0]
         df['core_delay_perc'] = timestamp_difference / df['e2e_delay']
-    df = df[df['core_delay'] >= 0]
+        df = df[df['core_delay'] >= 0]
     #print(len(df))
-
+    print(df.shape)
 
     ################### RAN Delay ###################
     if not ignore_core:

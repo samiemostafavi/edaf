@@ -42,7 +42,7 @@ KW_MAC_DEM = 'mac.demuxed'
 KW_MAC_DEC = 'mac.decoded' # this is the key to recognize the retransmissions
 
 # maximum number of lines to check
-MAX_DEPTH = 1000
+MAX_DEPTH = 10000
 
 
 def find_MAC_DEC(hqpid_value,hqround,prev_lines,line_number):
