@@ -40,13 +40,13 @@ copy_json_file() {
 }
 
 # Copy the latest *.lseq file from the remote gnb machine to the gnb folder
-gnb_file=$(copy_lseq_file "130.237.11.116" "root" "expeca" "${results_folder}/gnb")
+gnb_file=$(copy_lseq_file "130.237.11.115" "root" "expeca" "${results_folder}/gnb")
 echo "Copied gnb file: $gnb_file"
 
 # Copy the latest *.lseq file from the remote ue machine to the ue folder
-ue_file=$(copy_lseq_file "130.237.11.115" "root" "expeca" "${results_folder}/ue")
+ue_file=$(copy_lseq_file "130.237.11.116" "root" "expeca" "${results_folder}/ue")
 echo "Copied ue file: $ue_file"
 
 # Copy the latest *.json file from the remote UPF machine to the upf folder
-upf_file=$(copy_json_file "130.237.11.116" "root" "expeca" "edaf/test" "${results_folder}/upf")
+upf_file=$(copy_json_file "130.237.11.115" "root" "expeca" "edaf/test" "${results_folder}/upf")
 echo "Copied UPF file: $upf_file"
