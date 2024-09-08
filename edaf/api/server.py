@@ -4,8 +4,8 @@ from loguru import logger
 from multiprocessing import Process, Queue
 
 from edaf.core.common.timestamp import rdtsctotsOnline
-from edaf.core.uplink.gnb import ProcessULGNB
-from edaf.core.uplink.ue import ProcessULUE
+from edaf.core.uplink.gnb.gnb import ProcessULGNB
+from edaf.core.uplink.ue.ue import ProcessULUE
 from edaf.core.uplink.nlmt import process_ul_nlmt
 from edaf.core.uplink.combine import CombineUL
 from edaf.core.uplink.decompose import process_ul_journeys

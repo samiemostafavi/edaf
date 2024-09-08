@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from loguru import logger
 from collections import OrderedDict
+from edaf.core.common.utils import flatten_dict
 import sys
 
 import os
@@ -23,23 +24,6 @@ class FixSizeOrderedDict(OrderedDict):
             if len(self) > self._max:
                 logger.debug("ul combine buffer is full, poping items")
                 self.popitem(False)
-
-
-def flatten_dict(d, parent_key='', sep='.'):
-    items = {}
-    for key, value in d.items():
-        new_key = f"{parent_key}{sep}{key}" if parent_key else key
-        if isinstance(value, dict):
-            items.update(flatten_dict(value, new_key, sep=sep))
-        elif isinstance(value, list):
-            for i, item in enumerate(value):
-                if isinstance(item, dict):
-                    items.update(flatten_dict(item, f"{new_key}{sep}{i}", sep=sep))
-                else:
-                    items[f"{new_key}{sep}{i}"] = item
-        else:
-            items[new_key] = value
-    return items
 
 def closest_nlmt_entry_uplink(ue_timestamp, nlmt_dict):
     for seqno in nlmt_dict:

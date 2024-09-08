@@ -4,11 +4,12 @@ from loguru import logger
 from collections import deque
 import pandas as pd
 from edaf.core.common.timestamp import rdtsctotsOnline
-from edaf.core.uplink.gnb import ProcessULGNB
-from edaf.core.uplink.ue import ProcessULUE
+from edaf.core.uplink.gnb.gnb import ProcessULGNB
+from edaf.core.uplink.ue.ue import ProcessULUE
 from edaf.core.uplink.nlmt import process_ul_nlmt
 from edaf.core.uplink.combine import CombineUL
 from edaf.core.uplink.decompose import process_ul_journeys
+import sqlite3
     
 if not os.getenv('DEBUG'):
     logger.remove()
@@ -59,7 +60,7 @@ if __name__ == "__main__":
 
     # Get the Parquet file name from the command-line argument
     folder_path = Path(sys.argv[1])
-    result_parquet_file = Path(sys.argv[2])
+    result_database_file = Path(sys.argv[2])
 
     gnb_path = folder_path.joinpath("gnb")
     gnb_lseq_file = list(gnb_path.glob("*.lseq"))[0]
@@ -82,24 +83,68 @@ if __name__ == "__main__":
     # NLMT
     with gzip.open(upf_file, 'rt', encoding='utf-8') as file:
         nlmt_journeys = json.load(file)['oneway_trips']
-    logger.info(f"Loaded {len(nlmt_journeys)} NLMT trips")
+    logger.info(f"Loaded {len(nlmt_journeys)} NLMT packets")
 
     # GNB
     gnb_lseq_file = open(gnb_lseq_file, 'r')
     gnb_lines = gnb_lseq_file.readlines()
     l1linesgnb = gnbrdts.return_rdtsctots(gnb_lines)
     if len(l1linesgnb) > 0:
-        gnb_journeys = gnbproc.run(l1linesgnb)
-    logger.info(f"Loaded {len(gnb_journeys)} GNB trips")
-
+        gnb_ip_packets_df, gnb_rlc_segments_df, gnb_sched_reports_df, gnb_sched_maps_df, gnb_rlc_reports_df, gnb_mac_attempts_df = gnbproc.run(l1linesgnb)
+    logger.info(f"Processes GNB file")
+    
     # UE
     ue_lseq_file = open(ue_lseq_file, 'r')
     ue_lines = ue_lseq_file.readlines()
     l1linesue = uerdts.return_rdtsctots(ue_lines)
     l1linesue.reverse()
     if len(l1linesue) > 0:
-        ue_journeys = ueproc.run(l1linesue)
-    logger.info(f"Loaded {len(ue_journeys)} UE trips")
+        ue_ip_packets_df, ue_rlc_segments_df, ue_mac_attempts_df, ue_uldcis_df, ue_bsrupds_df, ue_bsrtxs_df, ue_srtrigs_df, ue_srtxs_df = ueproc.run(l1linesue)
+    
+    logger.info(f"Processed UE file")
+
+    # Open a connection to the SQLite database
+    conn = sqlite3.connect(result_database_file)
+
+    # Save each DataFrame to a separate table in the SQLite database
+    gnb_ip_packets_df.to_sql('gnb_ip_packets', conn, if_exists='replace', index=False)
+    gnb_rlc_segments_df.to_sql('gnb_rlc_segments', conn, if_exists='replace', index=False)
+    gnb_sched_reports_df.to_sql('gnb_sched_reports', conn, if_exists='replace', index=False)
+    gnb_sched_maps_df.to_sql('gnb_sched_maps', conn, if_exists='replace', index=False)
+    gnb_rlc_reports_df.to_sql('gnb_rlc_reports', conn, if_exists='replace', index=False)
+    gnb_mac_attempts_df.to_sql('gnb_mac_attempts', conn, if_exists='replace', index=False)
+
+    # Create gnb databases relationship
+    # For each 'gtp.out.sn' in gnb_ip_packets_df, find corresponding 'sdu_id' entries in gnb_rlc_segments_df
+    gnb_iprlc_rel_df = pd.merge(gnb_ip_packets_df[['gtp.out.sn']],
+                            gnb_rlc_segments_df[['rlc.reassembled.sn', 'sdu_id']],
+                            left_on='gtp.out.sn', right_on='rlc.reassembled.sn')
+    gnb_iprlc_rel_df = gnb_iprlc_rel_df.drop(columns=['rlc.reassembled.sn'])
+    gnb_iprlc_rel_df.to_sql('gnb_iprlc_rel', conn, if_exists='replace', index=False)
+
+    ue_ip_packets_df.to_sql('ue_ip_packets', conn, if_exists='replace', index=False)
+    ue_rlc_segments_df.to_sql('ue_rlc_segments', conn, if_exists='replace', index=False)
+    ue_mac_attempts_df.to_sql('ue_mac_attempts', conn, if_exists='replace', index=False)
+    ue_uldcis_df.to_sql('ue_uldcis', conn, if_exists='replace', index=False)
+    ue_bsrupds_df.to_sql('ue_bsrupds', conn, if_exists='replace', index=False)
+    ue_bsrtxs_df.to_sql('ue_bsrtxs', conn, if_exists='replace', index=False)
+    ue_srtrigs_df.to_sql('ue_srtrigs', conn, if_exists='replace', index=False)
+    ue_srtxs_df.to_sql('ue_srtxs', conn, if_exists='replace', index=False)
+
+    # For each pair of ['rlc.queue.R2buf', 'rlc.queue.sn'] in ue_ip_packets_df,
+    # find corresponding entries in ue_rlc_segments_df with the same values for ['rlc.txpdu.R2buf', 'rlc.txpdu.sn']
+    ue_iprlc_rel_df = pd.merge(ue_ip_packets_df[['rlc.queue.R2buf', 'rlc.queue.sn',  'ip_id']],
+                            ue_rlc_segments_df[['rlc.txpdu.R2buf', 'rlc.txpdu.sn', 'rlc.txpdu.srn','rlc.txpdu.timestamp', 'rlc.txpdu.length', 'txpdu_id']],  # Additional columns from ue_rlc_segments_df
+                            left_on=['rlc.queue.R2buf', 'rlc.queue.sn'],
+                            right_on=['rlc.txpdu.R2buf', 'rlc.txpdu.sn'])
+    ue_iprlc_rel_df = ue_iprlc_rel_df.drop(columns=['rlc.queue.R2buf', 'rlc.queue.sn' , 'rlc.txpdu.R2buf', 'rlc.txpdu.sn', 'rlc.txpdu.timestamp', 'rlc.txpdu.length'])
+    ue_iprlc_rel_df.to_sql('ue_iprlc_rel', conn, if_exists='replace', index=False)
+
+    # Close the connection when done
+    conn.close()
+    logger.info(f"DataFrames saved successfully to '{result_database_file}'.")
+
+    exit(0)
     ue_journeys.reverse()
 
     ind = 0
