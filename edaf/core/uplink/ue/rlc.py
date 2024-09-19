@@ -15,7 +15,7 @@ if not os.getenv('DEBUG'):
 # even when the packet enters the system
 PRIOR_LINES_NUM = 50
 
-def find_rlc_segments(previous_lines : RingBuffer, lines):
+def find_rlc_segments(previous_lines : RingBuffer, lines, txpdu_id_count):
     # we sort in the rdt process instead
     #lines = sorted(unsortedlines, key=sort_key, reverse=False)
 
@@ -70,7 +70,7 @@ def find_rlc_segments(previous_lines : RingBuffer, lines):
                 continue
 
             txpdu_report = {
-                'txpdu_id' : len(txpdus),
+                'txpdu_id' : txpdu_id_count,
                 KW_RLC_TX : {
                     'M1buf' : m1buf_value,
                     'R2buf' : r2buf_value,
@@ -259,6 +259,7 @@ def find_rlc_segments(previous_lines : RingBuffer, lines):
                 
             # result
             txpdus.append(flatten_dict(txpdu_report))
+            txpdu_id_count = txpdu_id_count + 1
 
     logger.info(f"Extracted {len(txpdus)} rlc txpdus on UE.")
 

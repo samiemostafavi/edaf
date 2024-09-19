@@ -23,7 +23,7 @@ def was_observed_before(rlc_arr : list, test_line : str):
             break
     return found
 
-def find_rlc_segments(previous_lines : RingBuffer, lines):
+def find_rlc_segments(previous_lines : RingBuffer, lines, sdu_id_count):
 
     #lines = sorted(unsortedlines, key=sort_key, reverse=False)
     rlc_reassemblies = []
@@ -50,7 +50,7 @@ def find_rlc_segments(previous_lines : RingBuffer, lines):
                 logger.warning(f"[GNB] For {KW_RLC}, could not find timestamp, length, or MRBuf in in line {line_number-id-1}. Skipping this '{KW_RLC}'.")
                 continue
             rlc_sdu = {
-                'sdu_id':len(rlc_reassemblies),
+                'sdu_id': sdu_id_count,
                 KW_RLC: {
                     'MRbuf': mrbuf_value,
                     'timestamp' : timestamp,
@@ -119,6 +119,7 @@ def find_rlc_segments(previous_lines : RingBuffer, lines):
                 }
 
             rlc_reassemblies.append(flatten_dict(rlc_sdu))
+            sdu_id_count = sdu_id_count + 1
 
     logger.info(f"Extracted {len(rlc_reassemblies)} rlc segments on GNB.")
 

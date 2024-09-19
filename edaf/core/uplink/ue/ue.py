@@ -27,13 +27,16 @@ PRIOR_LINES_NUM = 50
 class ProcessULUE:
     def __init__(self):
         self.previous_lines_ip = RingBuffer(PREV_LINES_MAX)
+        self.ip_id_count = 0
         self.previous_lines_rlc = RingBuffer(PREV_LINES_MAX)
+        self.txpdu_id_count = 0
         self.previous_lines_mac = RingBuffer(PREV_LINES_MAX)
+        self.mac_id_count = 0
         
     def run(self, lines):
-        ip_packets_df = find_ip_packets(self.previous_lines_ip, lines)
-        rlc_segments_df = find_rlc_segments(self.previous_lines_rlc, lines)
-        mac_attempts_df = find_mac_attempts(self.previous_lines_mac, lines)
+        ip_packets_df = find_ip_packets(self.previous_lines_ip, lines, self.ip_id_count)
+        rlc_segments_df = find_rlc_segments(self.previous_lines_rlc, lines, self.txpdu_id_count)
+        mac_attempts_df = find_mac_attempts(self.previous_lines_mac, lines, self.mac_id_count)
         uldcis_df = find_uldci_reports(lines)
         bsrupds_df, bsrtxs_df, srtrigs_df, srtxs_df = find_sched_reports(lines)
         return ip_packets_df, rlc_segments_df, mac_attempts_df, uldcis_df, bsrupds_df, bsrtxs_df, srtrigs_df, srtxs_df

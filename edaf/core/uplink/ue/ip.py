@@ -13,7 +13,7 @@ if not os.getenv('DEBUG'):
 
 PRIOR_LINES_NUM = 20
 
-def find_ip_packets(previous_lines : RingBuffer, lines):
+def find_ip_packets(previous_lines : RingBuffer, lines, ip_id_count):
     # we sort in the rdt process instead
     #lines = sorted(unsortedlines, key=sort_key, reverse=False)
 
@@ -39,7 +39,7 @@ def find_ip_packets(previous_lines : RingBuffer, lines):
                 pbuf_value = int(pbuf_match.group(1))
                 logger.debug(f"[UE] Found '{KW_R}' in line {line_number}, len:{len_value}, PBuf: {pbuf_value}, ts: {timestamp}")
                 journey = {
-                    'ip_id' : len(journeys),
+                    'ip_id' : ip_id_count,
                     KW_R : {
                         'timestamp' : timestamp,
                         'length' : len_value,
@@ -207,6 +207,7 @@ def find_ip_packets(previous_lines : RingBuffer, lines):
                     continue
 
             journeys.append(flatten_dict(journey))
+            ip_id_count = ip_id_count + 1
         
     logger.info(f"Extracted {len(journeys)} ip packet deliveries on UE.")
 

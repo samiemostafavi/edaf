@@ -17,6 +17,7 @@ class ProcessULGNB:
         # maximum number of lines to check
         self.previous_lines_ip = RingBuffer(500)
         self.previous_lines_rlc = RingBuffer(500)
+        self.sdu_id_count = 0
         self.previous_lines_sched = RingBuffer(500)
         self.previous_lines_maps = RingBuffer(500)
         self.previous_lines_mac1 = RingBuffer(100)
@@ -24,7 +25,7 @@ class ProcessULGNB:
 
     def run(self, lines):
         ip_packets_df = find_ip_packets(self.previous_lines_ip, lines)  # KEY: 'gtp.out.sn'
-        rlc_segments_df = find_rlc_segments(self.previous_lines_rlc, lines) # KEY: 'rlc.reassembled.sn' and 'rlc.reassembled.so' 
+        rlc_segments_df = find_rlc_segments(self.previous_lines_rlc, lines, self.sdu_id_count) # KEY: 'rlc.reassembled.sn' and 'rlc.reassembled.so' 
         sched_reports_df = find_sched_events(self.previous_lines_sched, lines) # KEY: 'sched.ue.frametx' 'sched.ue.slottx'
         sched_maps_df = find_sched_maps(self.previous_lines_maps, lines)
         rlc_reports_df = find_rlc_reports(lines) # dict keys: sn

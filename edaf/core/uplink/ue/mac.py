@@ -13,7 +13,7 @@ if not os.getenv('DEBUG'):
 # maximum number of lines to check
 MAX_DEPTH = 500
 
-def find_mac_attempts(previous_lines : RingBuffer, lines):
+def find_mac_attempts(previous_lines : RingBuffer, lines, mac_id_count):
     revlines = list(reversed(lines))
 
     #lines = sorted(unsortedlines, key=sort_key, reverse=False)
@@ -71,7 +71,7 @@ def find_mac_attempts(previous_lines : RingBuffer, lines):
                 continue
 
             mac_dec_arr = {
-                'mac_id' : len(mac_attempts),
+                'mac_id' : mac_id_count,
                 KW_PHY_TX: {
                     'timestamp': timestamp,
                     'Hbuf': hbuf_value,
@@ -133,6 +133,7 @@ def find_mac_attempts(previous_lines : RingBuffer, lines):
                 continue
 
             mac_attempts.append(flatten_dict(mac_dec_arr))
+            mac_id_count = mac_id_count + 1
 
     logger.info(f"Extracted {len(mac_attempts)} mac attempts on UE.")
 
