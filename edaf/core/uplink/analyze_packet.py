@@ -92,7 +92,12 @@ class ULPacketAnalyzer:
             for txpdu_id in txpdu_id_set:
                 ue_rlc_rows.append(self.ue_rlc_segments_df[self.ue_rlc_segments_df['txpdu_id'] == txpdu_id].iloc[0])
 
-            gnb_ip_row = self.gnb_ip_packets_df[self.gnb_ip_packets_df['gtp.out.sn'] == sn].iloc[0]
+            result_df = self.gnb_ip_packets_df[self.gnb_ip_packets_df['gtp.out.sn'] == sn]
+            if result_df.shape[0] == 0:
+                logger.error(f"UE SN {sn} for UE IP ID {ip_id} could not be found on GNB side. Dropped packet?")
+                continue
+            gnb_ip_row = result_df.iloc[0]
+
             filtered_df = self.gnb_iprlc_rel_df[self.gnb_iprlc_rel_df['gtp.out.sn'] == sn]
             gnb_rlc_rows = []
             for i in range(filtered_df.shape[0]):
@@ -199,6 +204,8 @@ class ULPacketAnalyzer:
                 (self.gnb_mac_attempts_df['phy.detectend.slot'] == ue_mac_attempt['phy.tx.sl']) &
                 (self.gnb_mac_attempts_df['phy.detectend.hqpid'] == ue_mac_attempt['phy.tx.hqpid'])
             ]
+            
+            gnb_mac_attempt = None
             if gnb_mac_attempt_arr.shape[0] == 0:
                 # unsuccessful harq attempt 
                 pass
@@ -211,37 +218,38 @@ class ULPacketAnalyzer:
             else:
                 gnb_mac_attempt = gnb_mac_attempt_arr.iloc[0]
 
-            if pd.isna(gnb_mac_attempt['phy.decodeend.timestamp']):
-                # unsuccessful harq attempt 
-                pass
-            else:
-                # possibly successful harq attempt
-                macattempt['phy.out_t'] = float(gnb_mac_attempt['phy.decodeend.timestamp'])
-                hq_s = int(gnb_mac_attempt['phy.detectend.hqpid'])
-                fm_s = int(gnb_mac_attempt['phy.detectend.frame'])
-                sl_s = int(gnb_mac_attempt['phy.detectend.slot'])
+            if gnb_mac_attempt is not None:
+                if pd.isna(gnb_mac_attempt['phy.decodeend.timestamp']):
+                    # unsuccessful harq attempt 
+                    pass
+                else:
+                    # possibly successful harq attempt
+                    macattempt['phy.out_t'] = float(gnb_mac_attempt['phy.decodeend.timestamp'])
+                    hq_s = int(gnb_mac_attempt['phy.detectend.hqpid'])
+                    fm_s = int(gnb_mac_attempt['phy.detectend.frame'])
+                    sl_s = int(gnb_mac_attempt['phy.detectend.slot'])
 
-            # find gnb side of this rlc segment
-            # use hq_s, fm_s, and sl_s which belong to the last mac attempt
-            # the possible hq, fm, and sl of that rlc segment in gnb
-            gnb_rlc_segment_arr = self.gnb_rlc_segments_df[
-                (self.gnb_rlc_segments_df['rlc.decoded.frame'] == fm_s) &
-                (self.gnb_rlc_segments_df['rlc.decoded.slot'] == sl_s) &
-                (self.gnb_rlc_segments_df['rlc.decoded.hqpid'] == hq_s)
-            ]
+                    # find gnb side of this rlc segment
+                    # use hq_s, fm_s, and sl_s which belong to the last mac attempt
+                    # the possible hq, fm, and sl of that rlc segment in gnb
+                    gnb_rlc_segment_arr = self.gnb_rlc_segments_df[
+                        (self.gnb_rlc_segments_df['rlc.decoded.frame'] == fm_s) &
+                        (self.gnb_rlc_segments_df['rlc.decoded.slot'] == sl_s) &
+                        (self.gnb_rlc_segments_df['rlc.decoded.hqpid'] == hq_s)
+                    ]
 
-            if gnb_rlc_segment_arr.shape[0] == 1:
-                gnb_rlc_segment = gnb_rlc_segment_arr.iloc[0]
-                rlcattempt['mac.out_t'] = gnb_rlc_segment['rlc.reassembled.timestamp']
-                rlcattempt['acked'] = True
-            elif gnb_rlc_segment_arr.shape[0] > 1:
-                logger.warning(f"UE RLC attempt {rlcattempt['id']} - found {gnb_rlc_segment_arr.shape[0]} (more than one) possible gnb rlc segment matches. We pick the one between packet arrival and departure times.")
-                for k in range(gnb_rlc_segment_arr.shape[0]):
-                    pot_gnb_seg = gnb_rlc_segment_arr.iloc[k]
-                    if pot_gnb_seg['rlc.reassembled.timestamp'] <= ue_ip_out_ts and pot_gnb_seg['rlc.reassembled.timestamp'] >= ue_ip_in_ts:
-                        gnb_rlc_segment = pot_gnb_seg
+                    if gnb_rlc_segment_arr.shape[0] == 1:
+                        gnb_rlc_segment = gnb_rlc_segment_arr.iloc[0]
                         rlcattempt['mac.out_t'] = gnb_rlc_segment['rlc.reassembled.timestamp']
                         rlcattempt['acked'] = True
+                    elif gnb_rlc_segment_arr.shape[0] > 1:
+                        logger.warning(f"UE RLC attempt {rlcattempt['id']} - found {gnb_rlc_segment_arr.shape[0]} (more than one) possible gnb rlc segment matches. We pick the one between packet arrival and departure times.")
+                        for k in range(gnb_rlc_segment_arr.shape[0]):
+                            pot_gnb_seg = gnb_rlc_segment_arr.iloc[k]
+                            if pot_gnb_seg['rlc.reassembled.timestamp'] <= ue_ip_out_ts and pot_gnb_seg['rlc.reassembled.timestamp'] >= ue_ip_in_ts:
+                                gnb_rlc_segment = pot_gnb_seg
+                                rlcattempt['mac.out_t'] = gnb_rlc_segment['rlc.reassembled.timestamp']
+                                rlcattempt['acked'] = True
 
             rlcattempt['mac.attempts'].append(macattempt)
 

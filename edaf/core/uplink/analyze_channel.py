@@ -94,13 +94,13 @@ class ULChannelAnalyzer:
                 (self.gnb_mac_attempts_df['phy.detectend.slot'] == ue_mac_attempt['phy.tx.sl']) &
                 (self.gnb_mac_attempts_df['phy.detectend.hqpid'] == ue_mac_attempt['phy.tx.hqpid'])
             ]
+            gnb_mac_attempt = None
             if gnb_mac_attempt_arr.shape[0] == 0:
                 # unsuccessful harq attempt 
                 pass
             elif gnb_mac_attempt_arr.shape[0] > 1:
                 logger.warning(f"UE MAC attempt {j}, looking for the corresponding gnb mac attempt. Found {gnb_mac_attempt_arr.shape[0]} (more than one) possible gnb mac attempt matches. We pick the closest one.")
                 min_diff = np.inf
-                gnb_mac_attempt = None
                 for k in range(gnb_mac_attempt_arr.shape[0]):
                     gnb_pot_mac_attempt = gnb_mac_attempt_arr.iloc[k]
                     if not pd.isna(gnb_pot_mac_attempt['phy.decodeend.timestamp']):
