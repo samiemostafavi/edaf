@@ -71,7 +71,7 @@ Download and install the modified openairinterface RAN code from our repository 
 ```
 git clone https://gitlab.eurecom.fr/samiemostafavi/openairinterface5g-edaf.git
 cd ~/openairinterface5g-edaf
-git checkout edaf-main
+git checkout edaf-develop
 ```
 
 Build openairinterface with `--enable-edaf` for both nrUE and gNB (use openairinterface instructions for more accurate instructions)
