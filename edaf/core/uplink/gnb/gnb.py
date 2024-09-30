@@ -3,7 +3,7 @@ from loguru import logger
 from edaf.core.common.utils import RingBuffer
 from edaf.core.uplink.gnb.ip import find_ip_packets
 from edaf.core.uplink.gnb.rlc import find_rlc_reports, find_rlc_segments
-from edaf.core.uplink.gnb.sched import find_sched_events, find_sched_maps
+from edaf.core.uplink.gnb.sched import find_sched_events, find_sched_maps, find_mcs_reports
 from edaf.core.uplink.gnb.mac import find_mac_successful_attempts, find_mac_failed_attempts
 import pandas as pd
 
@@ -32,5 +32,6 @@ class ProcessULGNB:
         mac_s_attempts_df = find_mac_successful_attempts(self.previous_lines_mac1, lines)
         mac_u_attempts_df = find_mac_failed_attempts(self.previous_lines_mac2, lines)
         mac_attempts_df = pd.concat([mac_s_attempts_df, mac_u_attempts_df], ignore_index=True)
+        mcs_reports_df = find_mcs_reports(lines)
 
-        return ip_packets_df, rlc_segments_df, sched_reports_df, sched_maps_df, rlc_reports_df, mac_attempts_df
+        return ip_packets_df, rlc_segments_df, sched_reports_df, sched_maps_df, rlc_reports_df, mac_attempts_df, mcs_reports_df

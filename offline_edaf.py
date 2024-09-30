@@ -3,8 +3,11 @@ from pathlib import Path
 from loguru import logger
 import pandas as pd
 from edaf.core.uplink.preprocess import preprocess_ul
-from edaf.core.uplink.analyze import ULPacketAnalyzer
+from edaf.core.uplink.analyze_packet import ULPacketAnalyzer
+from edaf.core.uplink.analyze_channel import ULChannelAnalyzer
+from edaf.core.uplink.analyze_scheduling import ULSchedulingAnalyzer
 import sqlite3
+import numpy as np
     
 if not os.getenv('DEBUG'):
     logger.remove()
@@ -19,6 +22,9 @@ if not os.getenv('DEBUG'):
 # ---- latseq.*.lseq
 # -- upf/
 # ---- se_*.json.gz
+
+# create database file by running
+# python offline_edaf.py results/240928_082545_results results/240928_082545_results/database.db
 
 if __name__ == "__main__":
 
@@ -59,8 +65,32 @@ if __name__ == "__main__":
     conn.close()
     logger.success(f"Tables successfully saved to '{result_database_file}'.")
 
-    # post process
-    analyzer = ULPacketAnalyzer(result_database_file)
-    uids_arr = [1977,1978,1979,1980,1981,1982]
-    packets = analyzer.figure_packettx_from_ueipids(uids_arr)
-    print(packets)
+    # post process examples:
+
+    # 1) Packet analyzer
+    packet_analyzer = ULPacketAnalyzer(result_database_file)
+    UE_PACKET_INSERTIONS = 5
+    uids_arr = list(range(packet_analyzer.first_ueipid, packet_analyzer.first_ueipid + UE_PACKET_INSERTIONS))
+    packets_dict = packet_analyzer.figure_packettx_from_ueipids(uids_arr)
+    print(packets_dict)
+
+    # 2) Channel analyzer
+    chan_analyzer = ULChannelAnalyzer(result_database_file)
+    begin_ts = chan_analyzer.first_ts
+    end_ts = chan_analyzer.last_ts
+    logger.info(f"Duration uploaded: {(end_ts-begin_ts)*1000} ms")
+    WINDOW_LEN_SECONDS = 2
+    mcs_arr = chan_analyzer.find_mcs_from_ts(begin_ts,begin_ts+WINDOW_LEN_SECONDS)
+    tb_arr = chan_analyzer.find_mac_attempts_from_ts(begin_ts,begin_ts+WINDOW_LEN_SECONDS)
+    print(mcs_arr)
+    print(tb_arr)
+
+    # 3) Scheduling analyzer
+    sched_analyzer = ULSchedulingAnalyzer(
+        total_prbs_num = 106, 
+        symbols_per_slot = 14, 
+        slots_per_frame = 20, 
+        slots_duration_ms = 0.5, 
+        scheduling_map_num_integers = 4,
+        db_addr = result_database_file
+    )

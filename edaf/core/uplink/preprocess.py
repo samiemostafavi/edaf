@@ -35,7 +35,7 @@ def preprocess_ul(
     # GNB preprocess
     l1linesgnb = gnbrdts.return_rdtsctots(gnb_lines)
     if len(l1linesgnb) > 0:
-        gnb_ip_packets_df, gnb_rlc_segments_df, gnb_sched_reports_df, gnb_sched_maps_df, gnb_rlc_reports_df, gnb_mac_attempts_df = gnbproc.run(l1linesgnb)
+        gnb_ip_packets_df, gnb_rlc_segments_df, gnb_sched_reports_df, gnb_sched_maps_df, gnb_rlc_reports_df, gnb_mac_attempts_df, gnb_mcs_reports_df = gnbproc.run(l1linesgnb)
     logger.success(f"Processed GNB lines")
     
     # UE preprocess
@@ -57,6 +57,7 @@ def preprocess_ul(
     gnb_sched_maps_df.to_sql('gnb_sched_maps', sqlite_conn, if_exists='replace', index=False)
     gnb_rlc_reports_df.to_sql('gnb_rlc_reports', sqlite_conn, if_exists='replace', index=False)
     gnb_mac_attempts_df.to_sql('gnb_mac_attempts', sqlite_conn, if_exists='replace', index=False)
+    gnb_mcs_reports_df.to_sql('gnb_mcs_reports', sqlite_conn, if_exists='replace', index=False)
 
     # Create gnb databases relationship
     # For each 'gtp.out.sn' in gnb_ip_packets_df, find corresponding 'sdu_id' entries in gnb_rlc_segments_df
