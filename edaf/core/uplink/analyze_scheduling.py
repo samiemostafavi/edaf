@@ -2,6 +2,7 @@ import os, sys
 import sqlite3
 from loguru import logger
 import pandas as pd
+import numpy as np
 
 if not os.getenv('DEBUG'):
     logger.remove()
@@ -71,71 +72,180 @@ class ULSchedulingAnalyzer:
 
         conn.close()
 
+        # check and report the first and last timestamps
+        self.first_ts = self.gnb_sched_maps_df['sched.map.pr.timestamp'].min()
+        self.last_ts = self.gnb_sched_maps_df['sched.map.pr.timestamp'].max()
+
         # check and report the ue_ip_ids and gnb sns
         #logger.success(f"Imported database '{db_addr}', with UE IDs ranging from {self.ue_ip_packets_df['ip_id'].min()} to {self.ue_ip_packets_df['ip_id'].max()}, and GNB SNs ranging from {self.gnb_ip_packets_df['gtp.out.sn'].min()} to {self.gnb_ip_packets_df['gtp.out.sn'].max()}")
 
     def decode_scheduling_map(self, map_row):
-    
         # find RBs structure
         ins_pr = []
         ins_po = []
         for i in range(self.conf_scheduling_map_num_integers):
             ins_pr.append(int(map_row[f'sched.map.pr.i{self.conf_scheduling_map_num_integers-i-1}m']))
             ins_po.append(int(map_row[f'sched.map.po.i{self.conf_scheduling_map_num_integers-i-1}m']))
-        
-        binary_string = ''.join(format(num, '016b') for num in ins_pr)[::-1]
+
+        binary_string = ''.join(format(num, '032b') for num in ins_pr)[::-1]
         first_106_bits = binary_string[:self.conf_total_prbs_num]
         pr_bit_list = [int(bit) for bit in first_106_bits]
 
-        binary_string = ''.join(format(num, '016b') for num in ins_po)[::-1]
-        first_106_bits = binary_string[:self.conf_symbols_per_slot]
+        binary_string = ''.join(format(num, '032b') for num in ins_po)[::-1]
+        first_106_bits = binary_string[:self.conf_total_prbs_num]
         po_bit_list = [int(bit) for bit in first_106_bits]
-
+        
         return pr_bit_list, po_bit_list
 
-    def figure_ulresourceblocks_from_ts(self, begin_ts, end_ts):
+    def find_resource_schedules_from_ts(self, begin_ts, end_ts):
 
-
-
+        schedules_arr = []
         # bring all sched.map.pr and sched.map.po within this frame (10ms earlier)
         maps = self.gnb_sched_maps_df[
             (self.gnb_sched_maps_df['sched.map.pr.timestamp'] >= begin_ts) &
             (self.gnb_sched_maps_df['sched.map.pr.timestamp'] < end_ts)
         ]
         for i in range(maps.shape[0]):
+            schedule = {
+                'decision_ts' : None,
+                'schedule_ts' : None,
+                'symbols_start' : None,
+                'symbols_num' : None,
+                'prbs_start' : None,
+                'prbs_num' : None,
+                'cause' : {},
+            }
             map_row = maps.iloc[i]
-            map_ts = map_row['sched.map.pr.timestamp']
-            dl_slot_time = (map_ts-begin_ts)*1000+self.conf_slots_duration_ms*4
-            #rect = patches.Rectangle((dl_slot_time-(SLOT_LENGTH/2), 3), SLOT_LENGTH, 1, color='blue')
-            #ax.add_patch(rect)
+
+            # find fm, sl and fmtx, sltx
+            schedule['decision_ts'] = map_row['sched.map.pr.timestamp']
+            abs_sltx_po = int(map_row[f'sched.map.po.frametx'])*self.conf_slots_per_frame +int(map_row[f'sched.map.po.slottx'])
+            abs_sl_po = int(map_row[f'sched.map.po.frame'])*self.conf_slots_per_frame +int(map_row[f'sched.map.po.slot'])
+            sltx_tsdif_ms = (abs_sltx_po - abs_sl_po)*self.conf_slots_duration_ms
+            schedule['schedule_ts'] = map_row['sched.map.pr.timestamp']+sltx_tsdif_ms
 
             # find RBs structure
             pr_bit_list, po_bit_list = self.decode_scheduling_map(map_row)
-            blocked_bits_list = [bit1 & bit2 for bit1, bit2 in zip(pr_bit_list, po_bit_list)]
-
+            if len(po_bit_list) == 0 or len(pr_bit_list) != len(po_bit_list):
+                logger.warning("Wrong schedule map codes")
+                continue
+            #blocked_bits_list = [bit1 & bit2 for bit1, bit2 in zip(pr_bit_list, po_bit_list)]
+            toggled_to_zero_array = [1 if pr_bit_list[i] == 1 and po_bit_list[i] == 0 else 0 for i in range(len(pr_bit_list))]
+            prbs_num = 0
+            prbs_start = np.inf
+            for i, bit in enumerate(toggled_to_zero_array):
+                if bit == 1:
+                    prbs_start = min(i,prbs_start)
+                    prbs_num = prbs_num + 1
+            if prbs_num == 0:
+                # no resources were scheduled
+                continue
+            schedule['prbs_start'] = prbs_start
+            schedule['prbs_num'] = prbs_num
+                    
             # find symbols structure
-            sym_begin = int(map_row[f'sched.map.po.sb'])
-            sym_size = int(map_row[f'sched.map.po.ss'])
+            schedule['symbols_start'] = int(map_row[f'sched.map.po.sb'])
+            schedule['symbols_num'] = int(map_row[f'sched.map.po.ss'])
 
-            # find fm, sl and fmtx, sltx
-            abs_sltx_po = int(map_row[f'sched.map.po.frametx'])*self.conf_slots_per_frame +int(map_row[f'sched.map.po.slottx']) 
-            abs_sl_po = int(map_row[f'sched.map.po.frame'])*self.conf_slots_per_frame +int(map_row[f'sched.map.po.slot'])
-            sltx_tsdif_ms = (abs_sltx_po - abs_sl_po)*self.conf_slots_duration_ms
+            # look for the cause
+            schedule['cause'] = self.find_sched_cause(int(map_row[f'sched.map.po.frametx']), int(map_row[f'sched.map.po.slottx']), map_row['sched.map.pr.timestamp'])
 
-            offset = sym_begin/self.conf_symbols_per_slot*self.conf_slots_duration_ms
-            width = sym_size/self.conf_symbols_per_slot*self.conf_slots_duration_ms
-            #rect = patches.Rectangle((dl_slot_time+sltx_tsdif_ms+offset, 3), width, 1, color='green')
-            #ax.add_patch(rect)
+            schedules_arr.append(schedule)
 
-            #tot_height = 1
-            #height = tot_height/NUM_PRBS*
-            #rect = patches.Rectangle((dl_slot_time+sltx_tsdif_ms+offset, 3), width, 1, color='purple')
-            #ax.add_patch(rect)
+        return schedules_arr
 
-            #tot_height = 1
-            #segment_height = tot_height / len(blocked_bits_list)
-            #for i, bit in enumerate(blocked_bits_list):
-            #    color = 'grey' if bit == 1 else 'green'
-            #    y_pos = i * segment_height 
-            #    rect = patches.Rectangle((dl_slot_time+sltx_tsdif_ms+offset, 3+y_pos), width, segment_height, color=color)
-            #    ax.add_patch(rect)
+
+    def find_sched_cause(self, frametx, slottx, decision_ts):
+        CLOSENESS_SECONDS = 0.005 #5ms
+
+        # find sched.ue for this frame and slot number
+        sched_ue_list = self.gnb_sched_reports_df[
+            (self.gnb_sched_reports_df['sched.ue.frametx'] == frametx) &
+            (self.gnb_sched_reports_df['sched.ue.slottx'] == slottx)
+        ]
+        sched_ue_list_new = []
+
+        for i in range(sched_ue_list.shape[0]):
+            sched_ue_row = sched_ue_list.iloc[i]
+            if abs(float(sched_ue_row['sched.cause.timestamp']) - float(decision_ts)) <= CLOSENESS_SECONDS: #5ms close
+                sched_ue_list_new.append(sched_ue_row)
+
+        if len(sched_ue_list_new) == 0:
+            logger.warning("Did not find scheduling cause for this scheduling map.")
+            return {}
+        elif len(sched_ue_list_new) > 1:
+            logger.warning(f"Found more than one scheduling cause for this frame and slot within {CLOSENESS_SECONDS*1000} ms window.")
+            return {}
+        
+        ue_sched_row = sched_ue_list_new[0]
+
+        return {     
+            'rnti' : ue_sched_row['sched.ue.rnti'],
+            'tbs' : ue_sched_row['sched.ue.tbs'],
+            'mcs' : ue_sched_row['sched.ue.mcs'],
+            'rbs' : ue_sched_row['sched.ue.rbs'],
+            'type' : ue_sched_row['sched.cause.type'],
+            'diff' : ue_sched_row['sched.cause.diff'],
+            'buf' : ue_sched_row['sched.cause.buf'],
+            'sched' : ue_sched_row['sched.cause.sched'], 
+            'hqround' : ue_sched_row['sched.cause.hqround'],
+            'hqpid' : ue_sched_row['sched.cause.hqpid']
+        }
+
+
+    def find_bsr_upd_from_ts(self, begin_ts, end_ts):
+
+        # bring all bsr.upd within this frame
+        # find bsr updates transmitted 'bsr.tx'
+        bsr_upd_list = self.ue_bsrupds_df[
+            (self.ue_bsrupds_df['timestamp'] >= begin_ts) &
+            (self.ue_bsrupds_df['timestamp'] < end_ts)
+        ]
+        if bsr_upd_list.shape[0] == 0:
+            logger.warning("Did not find any bsr upd for this interval.")
+            return []
+
+        bsr_upd_rows = []
+        for i in range(bsr_upd_list.shape[0]):
+            bsr_upd_row = bsr_upd_list.iloc[i]
+            bsr_upd_rows.append(dict(bsr_upd_row))
+
+        return sorted(bsr_upd_rows, key=lambda x: x['timestamp'])
+    
+    def find_bsr_tx_from_ts(self, begin_ts, end_ts):
+
+        # bring all bsr.upd within this frame
+        # find bsr updates transmitted 'bsr.tx'
+        bsr_tx_list = self.ue_bsrtxs_df[
+            (self.ue_bsrtxs_df['timestamp'] >= begin_ts) &
+            (self.ue_bsrtxs_df['timestamp'] < end_ts)
+        ]
+        if bsr_tx_list.shape[0] == 0:
+            logger.warning("Did not find any bsr tx for this interval.")
+            return []
+
+        bsr_tx_rows = []
+        for i in range(bsr_tx_list.shape[0]):
+            bsr_tx_row = bsr_tx_list.iloc[i]
+            bsr_tx_rows.append(bsr_tx_row)
+
+        return sorted(bsr_tx_rows, key=lambda x: x['timestamp'])
+
+    def find_sr_tx_from_ts(self, begin_ts, end_ts):
+
+        # bring all sr.tx within this frame
+        # find bsr updates transmitted 'sr.tx'
+        srtx_list = self.ue_srtxs_df[
+            (self.ue_srtxs_df['timestamp'] >= begin_ts) &
+            (self.ue_srtxs_df['timestamp'] < end_ts)
+        ]
+        if srtx_list.shape[0] == 0:
+            logger.warning("Did not find any sr tx for this interval.")
+            return []
+        
+        sr_tx_rows = []
+        for i in range(srtx_list.shape[0]):
+            sr_tx_row = srtx_list.iloc[i]
+            sr_tx_rows.append(sr_tx_row)
+
+        return sorted(sr_tx_rows, key=lambda x: x['timestamp'])

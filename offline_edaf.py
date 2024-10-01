@@ -95,3 +95,11 @@ if __name__ == "__main__":
         scheduling_map_num_integers = 4,
         db_addr = result_database_file
     )
+    begin_ts = sched_analyzer.first_ts
+    end_ts = sched_analyzer.last_ts
+    logger.info("Scheduling events at GNB:")
+    sched_arr = sched_analyzer.find_resource_schedules_from_ts(begin_ts+10, begin_ts+10+0.1)
+    print(sched_arr)
+    logger.info("Buffer status updates:")
+    bsrupd_arr = sched_analyzer.find_bsr_upd_from_ts(begin_ts+10, begin_ts+10+0.1)
+    print(bsrupd_arr)
