@@ -185,6 +185,8 @@ class ULChannelAnalyzer:
             ]
             sorted_hq_attempts = hq_attempts.sort_values(by='phy.tx.timestamp', ascending=True, inplace=False)
             first_ndi_row = sorted_hq_attempts[sorted_hq_attempts['mac.harq.ndi'] == 1]
+            if first_ndi_row.shape[0] == 0:
+                continue
             #first_ndi1_attempt_ts = float(first_ndi_row.head(1)['phy.tx.timestamp'])
             first_ndi1_attempt_ts = float(first_ndi_row['phy.tx.timestamp'].iloc[0])
 
