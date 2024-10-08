@@ -27,6 +27,9 @@ class ULChannelAnalyzer:
         self.ue_mac_attempts_df = pd.read_sql('SELECT * FROM ue_mac_attempts', conn)
         logger.info(f"ue_mac_attempts_df: {self.ue_mac_attempts_df.columns.tolist()}")
 
+        self.ue_rlc_segments_df = pd.read_sql('SELECT * FROM ue_rlc_segments', conn)
+        logger.info(f"ue_rlc_segments_df: {self.ue_rlc_segments_df.columns.tolist()}")
+
         conn.close()
 
         # check and report the first and last timestamps
