@@ -208,6 +208,19 @@ class ULChannelAnalyzer:
                     continue
                 already_observed_mac_ids.add(ue_mac_attempt['mac_id'])
 
+                # check if this is a rlc segment harq attempt
+                # ue_rlc_segments_df: ['txpdu_id', 'rlc.txpdu.M1buf', 'rlc.txpdu.R2buf', 'rlc.txpdu.sn', 'rlc.txpdu.srn', 'rlc.txpdu.so', 'rlc.txpdu.tbs', 'rlc.txpdu.timestamp', 'rlc.txpdu.length', 'rlc.txpdu.leno', 'rlc.txpdu.ENTno', 'rlc.txpdu.retx', 'rlc.txpdu.retxc', 'rlc.report.timestamp', 'rlc.report.num', 'rlc.report.ack', 'rlc.report.tpollex', 'mac.sdu.lcid', 'mac.sdu.tbs', 'mac.sdu.frame', 'mac.sdu.slot', 'mac.sdu.timestamp', 'mac.sdu.length', 'mac.sdu.M2buf', 'rlc.resegment.old_leno', 'rlc.resegment.old_so', 'rlc.resegment.other_seg_leno', 'rlc.resegment.other_seg_so', 'rlc.resegment.pdu_header_len', 'rlc.resegment.pdu_len', 'rlc.report.len']
+                ue_rlc_segment = None
+                ue_rlc_segments = self.ue_rlc_segments_df[ 
+                        (int(self.ue_rlc_segments_df['mac.sdu.frame']) ==  int(ue_mac_attempt[f'phy.tx.fm'])) &
+                        (int(self.ue_rlc_segments_df['mac.sdu.slot']) ==  int(ue_mac_attempt[f'phy.tx.sl']))
+                    ]
+                if ue_rlc_segments.shape[0] >= 1:
+                    for k in range(ue_rlc_segments.shape[0]):
+                        ue_rlc_segment_pot = ue_rlc_segments.iloc[k]
+                        if abs(ue_rlc_segment_pot['mac.sdu.timestamp']-ue_mac_attempt['phy.tx.timestamp']) < (0.001*GNB_MAC_RLC_MATCH_MS):
+                            ue_rlc_segment = ue_rlc_segment_pot
+
                 real_rvi = int(ue_mac_attempt[f'phy.tx.rvi'])-1 if int(ue_mac_attempt[f'phy.tx.rvi'])>0 else 0
                 harqattempt = {
                     'len' : ue_mac_attempt['phy.tx.len'],
@@ -219,7 +232,9 @@ class ULChannelAnalyzer:
                     'rvi': real_rvi,
                     'phy.out_t' : None,
                     'ndi' : ue_mac_attempt['mac.harq.ndi'],
+                    'rlc_in' : ue_rlc_segment != None,
                     'rlc_out' : False,
+                    'rlc_ack' : ue_rlc_segment['rlc.report.ack'] if ue_rlc_segment != None else None,
                 }
 
                 # now we can find the corresponding mac attempt on gnb side
