@@ -119,6 +119,7 @@ class ULPacketAnalyzer:
                 'ip.out_t' : float(gnb_ip_row['gtp.out.timestamp']),
                 'rlc.in_t' : float(ue_ip_row['rlc.queue.timestamp']),
                 'rlc.out_t' : None,
+                'backlog' : int(ue_ip_row['rlc.queue.queue']),
                 'rlc.attempts' : [],
             }
             # find rlc and mac attempts
