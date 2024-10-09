@@ -154,6 +154,20 @@ class ULSchedulingAnalyzer:
 
         return schedules_arr
 
+    def find_latest_bsrupd_before_ts(self, timestamp):
+
+        # bring all bsr.upd within this frame
+        # find bsr updates transmitted 'bsr.tx'
+        bsr_upd_list = self.ue_bsrupds_df[
+            (self.ue_bsrupds_df['timestamp'] < timestamp)
+        ]
+        if bsr_upd_list.shape[0] == 0:
+            logger.warning("Did not find any bsr upd for this interval.")
+            return []
+
+        max_timestamp_row = bsr_upd_list.loc[bsr_upd_list['timestamp'].idxmax()]
+        return max_timestamp_row
+
 
     def find_sched_cause(self, frametx, slottx, decision_ts):
         CLOSENESS_SECONDS = 0.005 #5ms
