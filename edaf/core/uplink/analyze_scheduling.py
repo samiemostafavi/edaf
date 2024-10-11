@@ -154,19 +154,35 @@ class ULSchedulingAnalyzer:
 
         return schedules_arr
 
-    def find_latest_bsrupd_before_ts(self, timestamp):
+    def find_frame_slot_from_ts(self, timestamp):
+        MAX_NUM_FRAMES = 1024
+        NUM_SLOTS_PER_FRAME = 20
+        SLOT_DURATION_S = 0.0005
+        CLOSENESS_LIMIT_S = 0.1 #100ms  
+        SCHED_OFFSET_S = 4*SLOT_DURATION_S #2ms or 4 slots
 
-        # bring all bsr.upd within this frame
-        # find bsr updates transmitted 'bsr.tx'
-        bsr_upd_list = self.ue_bsrupds_df[
-            (self.ue_bsrupds_df['timestamp'] < timestamp)
+        # find the closest sched.pr map to this timestamp
+        # bring all sched.map.pr within this frame (10ms earlier)
+        maps = self.gnb_sched_maps_df[
+            (self.gnb_sched_maps_df['sched.map.pr.timestamp'] < timestamp+(CLOSENESS_LIMIT_S/2) ) &
+            (self.gnb_sched_maps_df['sched.map.pr.timestamp'] >= timestamp-(CLOSENESS_LIMIT_S/2) )
         ]
-        if bsr_upd_list.shape[0] == 0:
-            logger.warning("Did not find any bsr upd for this interval.")
-            return []
+        if maps.shape[0] == 0:
+            logger.error("Did not find any scheduling map for this interval.")
+            return (None, None)
 
-        max_timestamp_row = bsr_upd_list.loc[bsr_upd_list['timestamp'].idxmax()]
-        return max_timestamp_row
+        # just pick the first one
+        pr_map_row = maps.iloc[0]
+        slots_diff = int((timestamp - (pr_map_row['sched.map.pr.timestamp']+SCHED_OFFSET_S))/SLOT_DURATION_S)
+        pr_abs_slot_num = pr_map_row['sched.map.po.frame']*NUM_SLOTS_PER_FRAME + pr_map_row['sched.map.po.slot']
+        new_abs_slot_num = pr_abs_slot_num + slots_diff
+        if new_abs_slot_num < 0:
+            new_abs_slot_num = MAX_NUM_FRAMES*NUM_SLOTS_PER_FRAME + new_abs_slot_num
+
+        new_frame_num = new_abs_slot_num // NUM_SLOTS_PER_FRAME
+        new_slot_num = new_abs_slot_num % NUM_SLOTS_PER_FRAME
+
+        return new_frame_num, new_slot_num
 
 
     def find_sched_cause(self, frametx, slottx, decision_ts):
@@ -205,6 +221,20 @@ class ULSchedulingAnalyzer:
             'hqround' : ue_sched_row['sched.cause.hqround'],
             'hqpid' : ue_sched_row['sched.cause.hqpid']
         }
+
+    def find_latest_bsrupd_before_ts(self, timestamp):
+
+        # bring all bsr.upd within this frame
+        # find bsr updates transmitted 'bsr.tx'
+        bsr_upd_list = self.ue_bsrupds_df[
+            (self.ue_bsrupds_df['timestamp'] < timestamp)
+        ]
+        if bsr_upd_list.shape[0] == 0:
+            logger.warning("Did not find any bsr upd for this interval.")
+            return []
+
+        max_timestamp_row = bsr_upd_list.loc[bsr_upd_list['timestamp'].idxmax()]
+        return max_timestamp_row
 
 
     def find_bsr_upd_from_ts(self, begin_ts, end_ts):

@@ -71,7 +71,7 @@ class ULPacketAnalyzer:
                 sn_set.add(filtered_df.iloc[i]['rlc.txpdu.srn'])
                 txpdu_id_set.add(filtered_df.iloc[i]['txpdu_id'])
 
-            logger.info(f"Found {len(sn_set)} related SN(s) and {len(txpdu_id_set)} TXPDU(s) for UE ip_id:{ip_id}")
+            logger.debug(f"Found {len(sn_set)} related SN(s) and {len(txpdu_id_set)} TXPDU(s) for UE ip_id:{ip_id}")
 
             if len(sn_set) > 1:
                 logger.error(f"More than one related ue SNs for UE ip_id:{ip_id}.")
@@ -86,7 +86,7 @@ class ULPacketAnalyzer:
                 continue
 
             sn = sn_set.pop()
-            logger.info(f"The UE SN found: {sn}")
+            logger.debug(f"The UE SN found: {sn}")
 
             ue_rlc_rows = []
             for txpdu_id in txpdu_id_set:
@@ -104,7 +104,7 @@ class ULPacketAnalyzer:
                 sdu_id = int(filtered_df.iloc[i]['sdu_id'])
                 gnb_rlc_rows.append(self.gnb_rlc_segments_df[self.gnb_rlc_segments_df['sdu_id'] == sdu_id].iloc[0])
 
-            logger.info(f"Found {len(txpdu_id_set)} gnb sdu_id(s) for SN:{sn}")
+            logger.debug(f"Found {len(txpdu_id_set)} gnb sdu_id(s) for SN:{sn}")
 
             if len(txpdu_id_set) == 0 :
                 logger.error(f"No related gnb txpdu ids found for UE ip_id:{ip_id} and sn:{sn}")
@@ -130,6 +130,8 @@ class ULPacketAnalyzer:
 
     def figure_mac_attempts(self, rlcattempt, ue_rlc_row, ue_ip_in_ts, ue_ip_out_ts):
 
+        CLOSENESS_SECONDS = 0.005 #5ms
+
         # find the first attempt's frame, slot, and hqpid
         fm = ue_rlc_row['mac.sdu.frame']
         sl = ue_rlc_row['mac.sdu.slot']
@@ -140,21 +142,27 @@ class ULPacketAnalyzer:
         # there must be at least one entry in ue mac attempts with this info
         poss_mac_attempt_0s = self.ue_mac_attempts_df[
             (self.ue_mac_attempts_df['phy.tx.fm'] == fm) &
-            (self.ue_mac_attempts_df['phy.tx.sl'] == sl) &
-            (self.ue_mac_attempts_df['mac.harq.M3buf'] <= m2buf) &
-            ((m2buf+m2len) <= (self.ue_mac_attempts_df['mac.harq.M3buf']+self.ue_mac_attempts_df['mac.harq.len'])) &
-            (self.ue_mac_attempts_df['phy.tx.timestamp'] >= ue_rlc_row['rlc.txpdu.timestamp']) &
-            (self.ue_mac_attempts_df['phy.tx.timestamp'] <= ue_ip_out_ts)
+            (self.ue_mac_attempts_df['phy.tx.sl'] == sl)
         ]
         if poss_mac_attempt_0s.shape[0] == 0:
-            logger.error("No harq attempts found")
-            return rlcattempt
-        elif poss_mac_attempt_0s.shape[0] > 1:
-            logger.error(f"Multiple harq attempts found: {poss_mac_attempt_0s.shape[0]}.")
+            logger.error(f"No UE MAC attempts found for the UE RLC attempt {dict(ue_rlc_row)}.")
             return rlcattempt
         
-        mac_attempt_0 = poss_mac_attempt_0s.iloc[0]
-        # logger.info(f"Found harq attempt: {mac_attempt_0}")
+        mac_attempt_0 = None
+        attempt_found = False
+        for i in range(poss_mac_attempt_0s.shape[0]):
+            poss_mac_attempt_0 = poss_mac_attempt_0s.iloc[i]
+            if (poss_mac_attempt_0['mac.harq.M3buf'] <= m2buf) and \
+                ((m2buf+m2len) <= (poss_mac_attempt_0['mac.harq.M3buf']+poss_mac_attempt_0['mac.harq.len'])) and \
+                ( abs(poss_mac_attempt_0['phy.tx.timestamp']-ue_rlc_row['rlc.txpdu.timestamp']) < CLOSENESS_SECONDS ) :
+                
+                mac_attempt_0 = poss_mac_attempt_0s.iloc[i]
+                attempt_found = True
+                break
+
+        if not attempt_found:
+            logger.error(f"No UE MAC attempts found for the UE RLC attempt {dict(ue_rlc_row)}.")
+            return rlcattempt
 
         hq = mac_attempt_0['phy.tx.hqpid']
         at_0_ts = float(mac_attempt_0['phy.tx.timestamp'])
@@ -176,7 +184,7 @@ class ULPacketAnalyzer:
             (self.ue_mac_attempts_df['phy.tx.timestamp'] >= at_0_ts)
         ]
         num_ue_mac_attempts = ue_mac_attempts.shape[0]
-        logger.info(f"UE RLC attempt {rlcattempt['id']} - number of mac attempts discovered: {num_ue_mac_attempts}")
+        logger.debug(f"UE RLC attempt {rlcattempt['id']} - number of mac attempts discovered: {num_ue_mac_attempts}")
 
         # frame and slot number of the last mac attempt
         hq_s = None
@@ -210,14 +218,13 @@ class ULPacketAnalyzer:
             if gnb_mac_attempt_arr.shape[0] == 0:
                 # unsuccessful harq attempt 
                 pass
-            elif gnb_mac_attempt_arr.shape[0] > 1:
-                logger.warning(f"UE RLC attempt {rlcattempt['id']} - UE MAC attempt {j}, looking for the corresponding gnb mac attempt. Found {gnb_mac_attempt_arr.shape[0]} (more than one) possible gnb mac attempt matches. We pick the one between packet arrival and departure times.")
+            elif gnb_mac_attempt_arr.shape[0] >= 1:
+                logger.debug(f"UE RLC attempt {rlcattempt['id']} - UE MAC attempt {j}, looking for the corresponding gnb mac attempt. Found {gnb_mac_attempt_arr.shape[0]} (more than one) possible gnb mac attempt matches. We pick the one closer than {CLOSENESS_SECONDS} seconds.")
                 for k in range(gnb_mac_attempt_arr.shape[0]):
                     gnb_pot_mac_attempt = gnb_mac_attempt_arr.iloc[k]
-                    if gnb_pot_mac_attempt['phy.decodeend.timestamp'] >= ue_ip_in_ts and gnb_pot_mac_attempt['phy.decodeend.timestamp'] <= ue_ip_out_ts:
+                    if abs(gnb_pot_mac_attempt['phy.decodeend.timestamp'] - ue_mac_attempt['phy.tx.timestamp']) < CLOSENESS_SECONDS:
                         gnb_mac_attempt = gnb_pot_mac_attempt
-            else:
-                gnb_mac_attempt = gnb_mac_attempt_arr.iloc[0]
+                        break
 
             if gnb_mac_attempt is not None:
                 if pd.isna(gnb_mac_attempt['phy.decodeend.timestamp']):
@@ -230,7 +237,7 @@ class ULPacketAnalyzer:
                     fm_s = int(gnb_mac_attempt['phy.detectend.frame'])
                     sl_s = int(gnb_mac_attempt['phy.detectend.slot'])
 
-                    # find gnb side of this rlc segment
+                    # find rlc segment of this mac attempt
                     # use hq_s, fm_s, and sl_s which belong to the last mac attempt
                     # the possible hq, fm, and sl of that rlc segment in gnb
                     gnb_rlc_segment_arr = self.gnb_rlc_segments_df[
@@ -239,18 +246,15 @@ class ULPacketAnalyzer:
                         (self.gnb_rlc_segments_df['rlc.decoded.hqpid'] == hq_s)
                     ]
 
-                    if gnb_rlc_segment_arr.shape[0] == 1:
-                        gnb_rlc_segment = gnb_rlc_segment_arr.iloc[0]
-                        rlcattempt['mac.out_t'] = gnb_rlc_segment['rlc.reassembled.timestamp']
-                        rlcattempt['acked'] = True
-                    elif gnb_rlc_segment_arr.shape[0] > 1:
-                        logger.warning(f"UE RLC attempt {rlcattempt['id']} - found {gnb_rlc_segment_arr.shape[0]} (more than one) possible gnb rlc segment matches. We pick the one between packet arrival and departure times.")
+                    if gnb_rlc_segment_arr.shape[0] >= 1:
+                        logger.debug(f"UE RLC attempt {rlcattempt['id']} - found {gnb_rlc_segment_arr.shape[0]} (more than one) possible gnb rlc segment matches. We pick the one closer than {CLOSENESS_SECONDS} seconds.")
                         for k in range(gnb_rlc_segment_arr.shape[0]):
                             pot_gnb_seg = gnb_rlc_segment_arr.iloc[k]
-                            if pot_gnb_seg['rlc.reassembled.timestamp'] <= ue_ip_out_ts and pot_gnb_seg['rlc.reassembled.timestamp'] >= ue_ip_in_ts:
+                            if abs(pot_gnb_seg['rlc.reassembled.timestamp']-gnb_mac_attempt['phy.decodeend.timestamp']) < CLOSENESS_SECONDS:
                                 gnb_rlc_segment = pot_gnb_seg
                                 rlcattempt['mac.out_t'] = gnb_rlc_segment['rlc.reassembled.timestamp']
                                 rlcattempt['acked'] = True
+                                break
 
             rlcattempt['mac.attempts'].append(macattempt)
 
@@ -271,16 +275,21 @@ class ULPacketAnalyzer:
 
         # Get the number of rlc segments
         num_rlc_segments = len(gnb_rlc_rows)
-        logger.info(f"Number of gnb RLC segments {num_rlc_segments}")
+        logger.debug(f"Number of gnb RLC segments {num_rlc_segments}")
 
         # Get the number of rlc attempts
         num_rlc_attempts = len(ue_rlc_rows)
-        logger.info(f"Number of ue RLC attempts {num_rlc_attempts}")
+        logger.debug(f"Number of ue RLC attempts {num_rlc_attempts}")
 
         # Iterate over each rlc attempt
         for i in range(num_rlc_attempts):
             rlcattempt = {
                 'id' : i,
+                'so' : int(ue_rlc_rows[i]['rlc.txpdu.so']),
+                'len' : int(ue_rlc_rows[i]['rlc.txpdu.leno']),
+                'rep_acked' : bool(ue_rlc_rows[i]['rlc.report.ack']),
+                'resegment' : (ue_rlc_rows[i]['rlc.resegment.old_leno'], ue_rlc_rows[i]['rlc.resegment.old_so'], ue_rlc_rows[i]['rlc.resegment.other_seg_leno'], ue_rlc_rows[i]['rlc.resegment.other_seg_so']),
+                'repeated' : False,
                 'mac.in_t' : None,
                 'mac.out_t' : None,
                 'frame' : None,
@@ -299,7 +308,9 @@ class ULPacketAnalyzer:
             # find mac attempts for this ue rlc attempt
             rlcattempt = self.figure_mac_attempts(rlcattempt, ue_rlc_rows[i], packet['ip.in_t'], packet['ip.out_t'])
 
-            # append the rlc segment
+            # here we decide not to append the rlc segment if there is no mac attempt
+            #if len(rlcattempt['mac.attempts']) > 0:
+                # append the rlc segment
             packet['rlc.attempts'].append(rlcattempt)
 
         # sort rlc segments based on their timestamp
@@ -316,6 +327,14 @@ class ULPacketAnalyzer:
             else:
                 for id, mac_att in enumerate(rlcattempt['mac.attempts']):
                         mac_att['acked'] = False
+
+        # fix repeated flag for rlc attempts
+        for idx, rlcattempt in enumerate(packet['rlc.attempts']):
+            # check if (rlcattempt['so'],rlcattempt['so']+rlcattempt['len']) is included in any of packet['rlc.attempts'][0:idx] so and so+lens
+            for prev_rlcattempt in packet['rlc.attempts'][:idx]:
+                if prev_rlcattempt['so'] <= rlcattempt['so'] and (prev_rlcattempt['so'] + prev_rlcattempt['len']) >= (rlcattempt['so'] + rlcattempt['len']):
+                    rlcattempt['repeated'] = True
+                    break
 
         # fix rlc.out_t, which is the latest rlc.attempts
         rlc_out = 0

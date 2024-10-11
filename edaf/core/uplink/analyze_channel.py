@@ -197,7 +197,7 @@ class ULChannelAnalyzer:
                 (self.ue_mac_attempts_df['phy.tx.timestamp'] >= at_0_ts)
             ]
             num_ue_mac_attempts = ue_mac_attempts.shape[0]
-            logger.info(f"Number of harq attempts discovered: {num_ue_mac_attempts}")
+            logger.debug(f"Number of harq attempts discovered: {num_ue_mac_attempts}")
 
             harqattempts = []
 
@@ -249,14 +249,12 @@ class ULChannelAnalyzer:
                 if gnb_mac_attempt_arr.shape[0] == 0:
                     # unsuccessful harq attempt 
                     pass
-                elif gnb_mac_attempt_arr.shape[0] > 1:
-                    logger.warning(f"UE Harq attempt {j}, looking for the corresponding gnb mac attempt. Found {gnb_mac_attempt_arr.shape[0]} (more than one) possible gnb mac attempt matches. We pick the one within {GNB_MAC_RLC_MATCH_MS} ms.")
+                elif gnb_mac_attempt_arr.shape[0] >= 1:
+                    logger.debug(f"UE Harq attempt {j}, looking for the corresponding gnb mac attempt. Found {gnb_mac_attempt_arr.shape[0]} (more than one) possible gnb mac attempt matches. We pick the one within {GNB_MAC_RLC_MATCH_MS} ms.")
                     for k in range(gnb_mac_attempt_arr.shape[0]):
                         gnb_pot_mac_attempt = gnb_mac_attempt_arr.iloc[k]
                         if abs(gnb_pot_mac_attempt['phy.decodeend.timestamp']-ue_mac_attempt['phy.tx.timestamp']) < (0.001*GNB_MAC_RLC_MATCH_MS):
                             gnb_mac_attempt = gnb_pot_mac_attempt
-                else:
-                    gnb_mac_attempt = gnb_mac_attempt_arr.iloc[0]
 
                 if gnb_mac_attempt is not None:
                     if pd.isna(gnb_mac_attempt['phy.decodeend.timestamp']):
@@ -278,13 +276,8 @@ class ULChannelAnalyzer:
                             (self.gnb_rlc_segments_df['rlc.decoded.slot'] == sl_s) &
                             (self.gnb_rlc_segments_df['rlc.decoded.hqpid'] == hq_s)
                         ]
-                        if gnb_rlc_segment_arr.shape[0] == 1:
-                            pot_gnb_seg = gnb_rlc_segment_arr.iloc[0]
-                            if abs(pot_gnb_seg['rlc.reassembled.timestamp'] - gnb_mac_attempt['phy.decodeend.timestamp'])*1000 < GNB_MAC_RLC_MATCH_MS:
-                                harqattempt['rlc_out'] = True
-                                harqattempt['rlc_ack'] = True
-                        elif gnb_rlc_segment_arr.shape[0] > 1:
-                            logger.warning(f"UE RLC attempt {harqattempt['id']} - found {gnb_rlc_segment_arr.shape[0]} (more than one) possible gnb rlc segment matches. We reject the ones farther than {GNB_MAC_RLC_MATCH_MS} ms.")
+                        if gnb_rlc_segment_arr.shape[0] >= 1:
+                            logger.debug(f"UE RLC attempt {harqattempt['id']} - found {gnb_rlc_segment_arr.shape[0]} (more than one) possible gnb rlc segment matches. We reject the ones farther than {GNB_MAC_RLC_MATCH_MS} ms.")
                             for k in range(gnb_rlc_segment_arr.shape[0]):
                                 pot_gnb_seg = gnb_rlc_segment_arr.iloc[k]
                                 if abs(pot_gnb_seg['rlc.reassembled.timestamp'] - gnb_mac_attempt['phy.decodeend.timestamp'])*1000 < GNB_MAC_RLC_MATCH_MS:
