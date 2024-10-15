@@ -9,7 +9,7 @@ if not os.getenv('DEBUG'):
     logger.add(sys.stdout, level="INFO")
 
 class ULSchedulingAnalyzer:
-    def __init__(self, total_prbs_num, symbols_per_slot, slots_per_frame, slots_duration_ms, scheduling_map_num_integers, db_addr):
+    def __init__(self, total_prbs_num, symbols_per_slot, slots_per_frame, slots_duration_ms, scheduling_map_num_integers, max_num_frames, db_addr):
 
         # example for config params:
         #self.conf_total_prbs_num = 106
@@ -23,6 +23,7 @@ class ULSchedulingAnalyzer:
         self.conf_slots_per_frame = slots_per_frame
         self.conf_slots_duration_ms = slots_duration_ms
         self.conf_scheduling_map_num_integers = scheduling_map_num_integers
+        self.conf_max_num_frames = max_num_frames
 
         # Open a connection to the SQLite database
         conn = sqlite3.connect(db_addr)
@@ -154,6 +155,47 @@ class ULSchedulingAnalyzer:
 
         return schedules_arr
 
+    def find_frame_slot_from_ts(self, 
+        timestamp, 
+        SCHED_OFFSET_S = 0 # 4*SLOT_DURATION_S #2ms or 4 slots is this sl_ahead?
+    ):
+
+        MAX_NUM_FRAMES = self.conf_max_num_frames
+        NUM_SLOTS_PER_FRAME = self.conf_slots_per_frame
+        SLOT_DURATION_S = self.conf_slots_duration_ms/1000
+        CLOSENESS_LIMIT_S = 0.01 #10ms
+
+        # find the closest sched.pr map to this timestamp
+        # bring all sched.map.pr within this frame (10ms earlier)
+        maps = self.gnb_sched_maps_df[
+            (self.gnb_sched_maps_df['sched.map.pr.timestamp'] < timestamp+(CLOSENESS_LIMIT_S/2) ) &
+            (self.gnb_sched_maps_df['sched.map.pr.timestamp'] >= timestamp-(CLOSENESS_LIMIT_S/2) )
+        ]
+        if maps.shape[0] == 0:
+            logger.error("Did not find any scheduling map for this interval.")
+            return (None, None)
+
+        # just pick the first one
+        pr_map_row = maps.iloc[0]
+        slots_diff = int(np.floor((timestamp - (pr_map_row['sched.map.pr.timestamp']+SCHED_OFFSET_S))/SLOT_DURATION_S))
+        pr_abs_slot_num = pr_map_row['sched.map.po.frame']*NUM_SLOTS_PER_FRAME + pr_map_row['sched.map.po.slot']
+        new_abs_slot_num = pr_abs_slot_num + slots_diff
+        if new_abs_slot_num < 0:
+            new_abs_slot_num = MAX_NUM_FRAMES*NUM_SLOTS_PER_FRAME + new_abs_slot_num
+
+        new_frame_num = new_abs_slot_num // NUM_SLOTS_PER_FRAME
+        new_slot_num = new_abs_slot_num % NUM_SLOTS_PER_FRAME
+
+        # calculate the fraction inside the slot that the packet arrived on
+        slot_frac = (timestamp - ((pr_map_row['sched.map.pr.timestamp']+SCHED_OFFSET_S) + slots_diff*SLOT_DURATION_S))/SLOT_DURATION_S
+        assert slot_frac < 1, f"Slot fraction is greater than 1: {slot_frac}"
+        assert slot_frac >= 0, f"Slot fraction is negative: {slot_frac}"
+
+        # calculate the beginning of the frame timestamp
+        frame_start_ts = (pr_map_row['sched.map.pr.timestamp']+SCHED_OFFSET_S) - (pr_map_row['sched.map.po.slot']*SLOT_DURATION_S)
+
+        return frame_start_ts, new_frame_num, new_slot_num + slot_frac
+
 
     def find_sched_cause(self, frametx, slottx, decision_ts):
         CLOSENESS_SECONDS = 0.005 #5ms
@@ -191,6 +233,20 @@ class ULSchedulingAnalyzer:
             'hqround' : ue_sched_row['sched.cause.hqround'],
             'hqpid' : ue_sched_row['sched.cause.hqpid']
         }
+
+    def find_latest_bsrupd_before_ts(self, timestamp):
+
+        # bring all bsr.upd within this frame
+        # find bsr updates transmitted 'bsr.tx'
+        bsr_upd_list = self.ue_bsrupds_df[
+            (self.ue_bsrupds_df['timestamp'] < timestamp)
+        ]
+        if bsr_upd_list.shape[0] == 0:
+            logger.warning("Did not find any bsr upd for this interval.")
+            return []
+
+        max_timestamp_row = bsr_upd_list.loc[bsr_upd_list['timestamp'].idxmax()]
+        return max_timestamp_row
 
 
     def find_bsr_upd_from_ts(self, begin_ts, end_ts):

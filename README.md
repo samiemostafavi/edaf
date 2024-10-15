@@ -10,6 +10,12 @@ To achieve that, EDAF
 
 ## Requirements and preparations
 
+Dependencies:
+```
+sudo apt-get install libsqlite3-dev
+```
+
+
 For running EDAF experiments, 2 hosts and 2 USRP SDRs are required to bring up an standalone OpenAirInterface (OAI) 5G network:
 1. Core Network (CN) and gNB host + gnb SDR
 2. nrUE host + nrUE SDR
