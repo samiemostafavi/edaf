@@ -177,7 +177,7 @@ class ULSchedulingAnalyzer:
 
         # just pick the first one
         pr_map_row = maps.iloc[0]
-        slots_diff = int((timestamp - (pr_map_row['sched.map.pr.timestamp']+SCHED_OFFSET_S))/SLOT_DURATION_S)
+        slots_diff = int(np.floor((timestamp - (pr_map_row['sched.map.pr.timestamp']+SCHED_OFFSET_S))/SLOT_DURATION_S))
         pr_abs_slot_num = pr_map_row['sched.map.po.frame']*NUM_SLOTS_PER_FRAME + pr_map_row['sched.map.po.slot']
         new_abs_slot_num = pr_abs_slot_num + slots_diff
         if new_abs_slot_num < 0:
@@ -186,10 +186,15 @@ class ULSchedulingAnalyzer:
         new_frame_num = new_abs_slot_num // NUM_SLOTS_PER_FRAME
         new_slot_num = new_abs_slot_num % NUM_SLOTS_PER_FRAME
 
+        # calculate the fraction inside the slot that the packet arrived on
+        slot_frac = (timestamp - ((pr_map_row['sched.map.pr.timestamp']+SCHED_OFFSET_S) + slots_diff*SLOT_DURATION_S))/SLOT_DURATION_S
+        assert slot_frac < 1, f"Slot fraction is greater than 1: {slot_frac}"
+        assert slot_frac >= 0, f"Slot fraction is negative: {slot_frac}"
+
         # calculate the beginning of the frame timestamp
         frame_start_ts = (pr_map_row['sched.map.pr.timestamp']+SCHED_OFFSET_S) - (pr_map_row['sched.map.po.slot']*SLOT_DURATION_S)
 
-        return frame_start_ts, new_frame_num, new_slot_num
+        return frame_start_ts, new_frame_num, new_slot_num + slot_frac
 
 
     def find_sched_cause(self, frametx, slottx, decision_ts):
