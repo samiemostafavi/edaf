@@ -45,9 +45,26 @@ class ULPacketAnalyzer:
         # check and report the first and last gnb sns
         self.first_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].min()
         self.last_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].max()
+        # check and report the first and last timestamps
+        self.first_ueip_ts = self.ue_ip_packets_df['ip.in.timestamp'].min()
+        self.last_ueip_ts = self.ue_ip_packets_df['ip.in.timestamp'].max()
+
 
         # check and report the ue_ip_ids and gnb sns
         logger.success(f"Imported database '{db_addr}', with UE IDs ranging from {self.ue_ip_packets_df['ip_id'].min()} to {self.ue_ip_packets_df['ip_id'].max()}, and GNB SNs ranging from {self.gnb_ip_packets_df['gtp.out.sn'].min()} to {self.gnb_ip_packets_df['gtp.out.sn'].max()}")
+
+    def figure_packettx_from_ts(self, ts_begin, ts_end):
+
+        poss_ueippackets = self.ue_ip_packets_df[
+            (self.ue_ip_packets_df['ip.in.timestamp'] <= ts_end) &
+            (self.ue_ip_packets_df['ip.in.timestamp'] >= ts_begin)
+        ]     
+        ue_ipid_list = []
+        for i in range(poss_ueippackets.shape[0]):
+            row_ueippacket = poss_ueippackets.iloc[i]
+            ue_ipid_list.append(row_ueippacket['ip_id'])
+
+        return self.figure_packettx_from_ueipids(ue_ipid_list)
 
     def figure_packettx_from_ueipids(self, ue_ipid_list : list):
     
