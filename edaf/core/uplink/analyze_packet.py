@@ -13,6 +13,10 @@ class ULPacketAnalyzer:
         conn = sqlite3.connect(db_addr)
 
         # Read each table from the SQLite database into pandas DataFrames
+
+        self.nlmt_df = pd.read_sql('SELECT * FROM nlmt_ip_packets', conn)
+        logger.info(f"nlmt_df: {self.nlmt_df.columns.tolist()}")
+
         self.gnb_ip_packets_df = pd.read_sql('SELECT * FROM gnb_ip_packets', conn)
         logger.info(f"gnb_ip_packets_df: {self.gnb_ip_packets_df.columns.tolist()}")
 
