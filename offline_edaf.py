@@ -52,10 +52,16 @@ if __name__ == "__main__":
 
     # NLMT
     nlmt_path = folder_path.joinpath("upf")
-    nlmt_file = list(nlmt_path.glob("se_*.json.gz"))[0]
-    with gzip.open(nlmt_file, 'rt', encoding='utf-8') as file:
-        nlmt_records = json.load(file)['oneway_trips']
-    logger.info(f"found nlmt json file: {nlmt_file}")
+    nlmt_file = list(nlmt_path.glob("se_*"))[0]
+    if nlmt_file.suffix == '.json':
+        with open(nlmt_file, 'r') as file:
+            nlmt_records = json.load(file)['oneway_trips']
+    elif nlmt_file.suffix == '.gz':
+        with gzip.open(nlmt_file, 'rt', encoding='utf-8') as file:
+            nlmt_records = json.load(file)['oneway_trips']
+    else:
+        logger.error(f"NLMT file format not supported: {nlmt_file.suffix}")
+    logger.info(f"found nlmt file: {nlmt_file}")
 
     # Open a connection to the SQLite database
     conn = sqlite3.connect(result_database_file)
