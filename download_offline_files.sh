@@ -34,19 +34,19 @@ copy_json_file() {
     local destination_folder="$5"
 
     # Copy the latest *.json file using scp
-    latest_json=$(sshpass -p "$password" ssh "$user@$upf_ip" "ls -t /tmp/$upf_folder/server/*.json.gz | head -n 1")
+    latest_json=$(sshpass -p "$password" ssh "$user@$upf_ip" "ls -t /tmp/*.json.gz | head -n 1")
     sshpass -p "$password" scp -r "$user@$upf_ip:$latest_json" "$destination_folder"
     echo "$destination_folder/$(basename $latest_json)"
 }
 
 # Copy the latest *.lseq file from the remote gnb machine to the gnb folder
-gnb_file=$(copy_lseq_file "130.237.11.111" "root" "expeca" "${results_folder}/gnb")
+gnb_file=$(copy_lseq_file "130.237.11.126" "root" "gourav" "${results_folder}/gnb")
 echo "Copied gnb file: $gnb_file"
 
 # Copy the latest *.lseq file from the remote ue machine to the ue folder
-ue_file=$(copy_lseq_file "130.237.11.126" "root" "gourav" "${results_folder}/ue")
+ue_file=$(copy_lseq_file "130.237.11.115" "root" "expeca" "${results_folder}/ue")
 echo "Copied ue file: $ue_file"
 
 # Copy the latest *.json file from the remote UPF machine to the upf folder
-upf_file=$(copy_json_file "130.237.11.111" "root" "expeca" "edaf/test" "${results_folder}/upf")
+upf_file=$(copy_json_file "130.237.11.126" "root" "gourav" "edaf/test" "${results_folder}/upf")
 echo "Copied UPF file: $upf_file"

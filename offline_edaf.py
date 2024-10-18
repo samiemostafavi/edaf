@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
     # 1) Packet analyzer
     packet_analyzer = ULPacketAnalyzer(result_database_file)
-    UE_PACKET_INSERTIONS = 1000
+    UE_PACKET_INSERTIONS = 100
     uids_arr = list(range(packet_analyzer.first_ueipid, packet_analyzer.first_ueipid + UE_PACKET_INSERTIONS))
     packets_dict = packet_analyzer.figure_packettx_from_ueipids(uids_arr)
     print(packets_dict)
