@@ -199,7 +199,7 @@ def find_sched_reports(lines):
                 logger.warning(f"[UE] For {SRTRIG_str}, could not find properties in line {line_number}. Skipping this {SRTRIG_str}")
                 continue
 
-            logger.debug(f"[UE] Found '{SRTRIG_str}' in line {line_number}, timestamp: {timestamp}, frame: {fm_value}, slot: {sl_value}, len: {len_value}")
+            logger.debug(f"[UE] Found '{SRTRIG_str}' in line {line_number}, timestamp: {timestamp}, frame: {fm_value}, slot: {sl_value}")
             srtrig_dict = {
                 'frame': fm_value,
                 'slot': sl_value,
