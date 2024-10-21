@@ -123,7 +123,7 @@ class ULSchedulingAnalyzer:
             abs_sltx_po = int(map_row[f'sched.map.po.frametx'])*self.conf_slots_per_frame +int(map_row[f'sched.map.po.slottx'])
             abs_sl_po = int(map_row[f'sched.map.po.frame'])*self.conf_slots_per_frame +int(map_row[f'sched.map.po.slot'])
             sltx_tsdif_ms = (abs_sltx_po - abs_sl_po)*self.conf_slots_duration_ms
-            schedule['schedule_ts'] = map_row['sched.map.pr.timestamp']+sltx_tsdif_ms
+            schedule['schedule_ts'] = map_row['sched.map.pr.timestamp']+sltx_tsdif_ms/1000
 
             # find RBs structure
             pr_bit_list, po_bit_list = self.decode_scheduling_map(map_row)
