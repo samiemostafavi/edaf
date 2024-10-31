@@ -167,7 +167,7 @@ def find_sched_reports(lines):
                 logger.warning(f"[UE] For {SRTX_str}, could not find properties in line {line_number}. Skipping this {SRTX_str}")
                 continue
 
-            logger.debug(f"[UE] Found '{SRTX_str}' in line {line_number}, timestamp: {timestamp}, frame: {fm_value}, slot: {sl_value}, len: {len_value}")
+            logger.debug(f"[UE] Found '{SRTX_str}' in line {line_number}, timestamp: {timestamp}, frame: {fm_value}, slot: {sl_value}")
             srtx_dict = {
                 'frame': fm_value,
                 'slot': sl_value,
