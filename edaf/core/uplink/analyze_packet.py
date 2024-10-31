@@ -217,6 +217,7 @@ class ULPacketAnalyzer:
             macattempt = {
                 'len' : ue_mac_attempt['phy.tx.len'],
                 'id' : ue_mac_attempt['mac_id'],
+                'rnti' : ue_mac_attempt['phy.tx.rnti'],
                 'frame' : int(ue_mac_attempt[f'phy.tx.fm']),
                 'slot' : int(ue_mac_attempt[f'phy.tx.sl']),
                 'hqpid' : int(ue_mac_attempt[f'phy.tx.hqpid']),
@@ -274,6 +275,7 @@ class ULPacketAnalyzer:
                             if abs(pot_gnb_seg['rlc.reassembled.timestamp']-gnb_mac_attempt['phy.decodeend.timestamp']) < CLOSENESS_SECONDS:
                                 gnb_rlc_segment = pot_gnb_seg
                                 rlcattempt['mac.out_t'] = gnb_rlc_segment['rlc.reassembled.timestamp']
+                                rlcattempt['rnti'] = gnb_rlc_segment['rlc.decoded.rnti']
                                 rlcattempt['acked'] = True
                                 break
 
@@ -313,6 +315,7 @@ class ULPacketAnalyzer:
                 'repeated' : False,
                 'mac.in_t' : None,
                 'mac.out_t' : None,
+                'rnti' : None,
                 'frame' : None,
                 'slot' : None,
                 'acked' : False,
