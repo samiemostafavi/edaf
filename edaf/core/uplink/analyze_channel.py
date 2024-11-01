@@ -230,6 +230,7 @@ class ULChannelAnalyzer:
                     'slot' : int(ue_mac_attempt[f'phy.tx.sl']),
                     'hqpid' : int(ue_mac_attempt[f'phy.tx.hqpid']),
                     'phy.in_t' : float(ue_mac_attempt[f'phy.tx.timestamp']),
+                    'rnti' : ue_mac_attempt['phy.tx.rnti'],
                     'rvi': real_rvi,
                     'phy.out_t' : None,
                     'ndi' : ue_mac_attempt['mac.harq.ndi'],
@@ -242,7 +243,8 @@ class ULChannelAnalyzer:
                 gnb_mac_attempt_arr = self.gnb_mac_attempts_df[
                     (self.gnb_mac_attempts_df['phy.detectend.frame'] == ue_mac_attempt['phy.tx.fm']) &
                     (self.gnb_mac_attempts_df['phy.detectend.slot'] == ue_mac_attempt['phy.tx.sl']) &
-                    (self.gnb_mac_attempts_df['phy.detectend.hqpid'] == ue_mac_attempt['phy.tx.hqpid'])
+                    (self.gnb_mac_attempts_df['phy.detectend.hqpid'] == ue_mac_attempt['phy.tx.hqpid']) #& 
+                    # (self.gnb_mac_attempts_df['phy.detectend.rnti'] == ue_mac_attempt['phy.tx.rnti']) # TODO gnb mac attempts do not have rnti
                 ]
                 
                 gnb_mac_attempt = None
