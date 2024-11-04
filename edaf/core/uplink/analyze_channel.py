@@ -30,6 +30,9 @@ class ULChannelAnalyzer:
         self.ue_rlc_segments_df = pd.read_sql('SELECT * FROM ue_rlc_segments', conn)
         logger.info(f"ue_rlc_segments_df: {self.ue_rlc_segments_df.columns.tolist()}")
 
+        self.ue_uldcis_df = pd.read_sql('SELECT * FROM ue_uldcis', conn)
+        logger.info(f"ue_uldcis_df: {self.ue_uldcis_df.columns.tolist()}")
+
         conn.close()
 
         # check and report the first and last timestamps
@@ -85,6 +88,7 @@ class ULChannelAnalyzer:
                 'frame' : int(ue_harq_attempt[f'phy.tx.fm']),
                 'slot' : int(ue_harq_attempt[f'phy.tx.sl']),
                 'hqpid' : int(ue_harq_attempt[f'phy.tx.hqpid']),
+                'rnti' : ue_harq_attempt['phy.tx.rnti'],
                 'phy.in_t' : float(ue_harq_attempt[f'phy.tx.timestamp']),
                 'rvi': int(ue_harq_attempt[f'phy.tx.rvi']),
                 'phy.out_t' : None,
@@ -95,7 +99,8 @@ class ULChannelAnalyzer:
             gnb_harq_attempt_arr = self.gnb_mac_attempts_df[
                 (self.gnb_mac_attempts_df['phy.detectend.frame'] == ue_harq_attempt['phy.tx.fm']) &
                 (self.gnb_mac_attempts_df['phy.detectend.slot'] == ue_harq_attempt['phy.tx.sl']) &
-                (self.gnb_mac_attempts_df['phy.detectend.hqpid'] == ue_harq_attempt['phy.tx.hqpid'])
+                (self.gnb_mac_attempts_df['phy.detectend.hqpid'] == ue_harq_attempt['phy.tx.hqpid']) #&
+                # (self.gnb_mac_attempts_df['phy.detectend.rnti'] == ue_harq_attempt['phy.tx.rnti']) # TODO gnb mac attempts do not have rnti
             ]
             gnb_harq_attempt = None
             if gnb_harq_attempt_arr.shape[0] == 0:
@@ -294,3 +299,149 @@ class ULChannelAnalyzer:
             res_arr.append(harqattempts)
 
         return res_arr
+    
+
+    def find_failed_mac_attempts_from_ts(self, begin_ts : float, end_ts : float, rnti : str) -> list:
+        """
+        finds all the mac attempts between UE and gnb where no data comes out of rlc in gnb
+        returns a list of dict
+        """
+
+        GNB_RLC_UE_MAC_MATCH_MS = 10
+
+        # there must be at least one entry in ue mac attempts with this info
+        ue_mac_attempts_0 = self.ue_mac_attempts_df[
+            (self.ue_mac_attempts_df['phy.tx.timestamp'] >= begin_ts) &
+            (self.ue_mac_attempts_df['phy.tx.timestamp'] <= end_ts)
+        ]
+        if ue_mac_attempts_0.shape[0] == 0:
+            logger.error("No harq attempts found")
+            return []
+
+        logger.info(f"UE MAC attempts found: {ue_mac_attempts_0.shape[0]}.")
+
+        res_arr = []
+        for i in range(ue_mac_attempts_0.shape[0]):
+            ue_mac_attempt = ue_mac_attempts_0.iloc[i]
+            progress = (i + 1) / ue_mac_attempts_0.shape[0] * 100
+            print(f"\rProgress: {progress:.2f}%", end="")
+            # now we can find the corresponding rlc segment on gnb side
+            gnb_rlc_segment_arr = self.gnb_rlc_segments_df[
+                (self.gnb_rlc_segments_df['rlc.decoded.frame'] == ue_mac_attempt['phy.tx.fm']) &
+                (self.gnb_rlc_segments_df['rlc.decoded.slot'] == ue_mac_attempt['phy.tx.sl']) &
+                (self.gnb_rlc_segments_df['rlc.decoded.hqpid'] == ue_mac_attempt['phy.tx.hqpid']) &
+                (self.gnb_rlc_segments_df['rlc.decoded.rnti'] == rnti)
+            ]
+            found_gnb_rlc_out = False
+            if gnb_rlc_segment_arr.shape[0] > 0:
+                for k in range(gnb_rlc_segment_arr.shape[0]):
+                    pot_gnb_seg = gnb_rlc_segment_arr.iloc[k]
+                    if abs(pot_gnb_seg['rlc.reassembled.timestamp'] - ue_mac_attempt['phy.tx.timestamp'])*1000 < GNB_RLC_UE_MAC_MATCH_MS:
+                        found_gnb_rlc_out = True
+                        break
+
+            if not found_gnb_rlc_out:
+                ue_mac_attempt_dict = ue_mac_attempt.to_dict()
+                ue_mac_attempt_dict['phy.tx.real_rvi'] = (int(ue_mac_attempt['phy.tx.rvi'])-1) if int(ue_mac_attempt['phy.tx.rvi'])>1 else 1
+                res_arr.append(ue_mac_attempt_dict)
+        
+        print("\n")
+        return res_arr
+
+    def find_failed_mac_attempts_from_ts_fast(self, begin_ts : float, end_ts : float, rnti : str) -> list:
+        """
+        finds all the mac attempts between UE and gnb where on the harq ndi (new data indicator) is set to zero
+        returns a list of dict
+        """
+
+        GNB_RLC_UE_MAC_MATCH_MS = 10
+
+        # there must be at least one entry in ue mac attempts with this info
+        ue_mac_attempts_0 = self.ue_mac_attempts_df[
+            (self.ue_mac_attempts_df['phy.tx.timestamp'] >= begin_ts) &
+            (self.ue_mac_attempts_df['phy.tx.timestamp'] <= end_ts) &
+            (self.ue_mac_attempts_df['mac.harq.ndi'] == 0)
+        ]
+        if ue_mac_attempts_0.shape[0] == 0:
+            logger.warning("No failed MAC attempts found")
+            return []
+
+        logger.info(f"UE failed MAC attempts found: {ue_mac_attempts_0.shape[0]}.")
+
+        res_arr = []
+        for i in range(ue_mac_attempts_0.shape[0]):
+            ue_mac_attempt = ue_mac_attempts_0.iloc[i]
+            progress = (i + 1) / ue_mac_attempts_0.shape[0] * 100
+            print(f"\rProgress: {progress:.2f}%", end="")
+
+            ue_mac_attempt_dict = ue_mac_attempt.to_dict()
+            ue_mac_attempt_dict['phy.tx.real_rvi'] = (int(ue_mac_attempt['phy.tx.rvi'])-1) if int(ue_mac_attempt['phy.tx.rvi'])>1 else 1
+            res_arr.append(ue_mac_attempt_dict)
+
+        print("\n")
+        return res_arr
+
+    def find_failed_uldci_from_ts(self, begin_ts : float, end_ts : float, rnti : str) -> list:
+
+        UL_DCI_GNB_RLC_MATCH_MS = 10
+
+        # if there is an uplink dci, but no data comes out of rlc in gnb, then it was a failed uldci
+        # NOTE: this can be just an excess scheduling, but we can't know that
+
+        # ue_uldcis_df: ['rnti', 'frame', 'slot', 'frametx', 'slottx', 'timestamp', 'rbb', 'rbs', 'sb', 'ss', 'uldci_ent']
+        # find all attempts with timestamps less than this
+        ue_ul_dcis = self.ue_uldcis_df[
+            (self.ue_uldcis_df['timestamp'] < end_ts) &
+            (self.ue_uldcis_df['timestamp'] >= begin_ts) &
+            (self.ue_uldcis_df['rnti'] == rnti)
+        ]
+
+        num_ue_ul_dcis = ue_ul_dcis.shape[0]
+        logger.info(f"Number of UE ul DCIs discovered: {num_ue_ul_dcis}")
+
+        res_list = []
+        for j in range(num_ue_ul_dcis):
+            ue_ul_dci = ue_ul_dcis.iloc[j]
+            frame = int(ue_ul_dci['frametx'])
+            slot = int(ue_ul_dci['slottx'])
+
+            found_gnb_rlc_out = False
+
+            # find the corresponding rlc segment on the gnb side
+            gnb_rlc_segment_arr = self.gnb_rlc_segments_df[
+                (self.gnb_rlc_segments_df['rlc.decoded.frame'] == frame) &
+                (self.gnb_rlc_segments_df['rlc.decoded.slot'] == slot) &
+                (self.gnb_rlc_segments_df['rlc.decoded.rnti'] == rnti)
+            ]
+            if gnb_rlc_segment_arr.shape[0] > 0:
+                for k in range(gnb_rlc_segment_arr.shape[0]):
+                    pot_gnb_seg = gnb_rlc_segment_arr.iloc[k]
+                    if abs(pot_gnb_seg['rlc.reassembled.timestamp'] - ue_ul_dci['timestamp'])*1000 < UL_DCI_GNB_RLC_MATCH_MS:
+                        found_gnb_rlc_out = True
+                        break
+
+            if not found_gnb_rlc_out:
+                res_list.append(ue_ul_dci)
+
+        logger.info(f"Number of failed ul DCIs discovered: {len(res_list)}")
+
+        return res_list
+
+
+    def find_repeated_ue_rlc_attempts_from_ts(self, begin_ts : float, end_ts : float) -> list:
+        """
+        finds all the repeated rlc attempts between UE and gnb
+        returns a list of dict
+        """
+        
+        # ue_rlc_segments_df: ['txpdu_id', 'rlc.txpdu.M1buf', 'rlc.txpdu.R2buf', 'rlc.txpdu.sn', 'rlc.txpdu.srn', 'rlc.txpdu.so', 'rlc.txpdu.tbs', 'rlc.txpdu.timestamp', 'rlc.txpdu.length', 'rlc.txpdu.leno', 'rlc.txpdu.ENTno', 'rlc.txpdu.retx', 'rlc.txpdu.retxc', 'rlc.report.timestamp', 'rlc.report.num', 'rlc.report.ack', 'rlc.report.tpollex', 'mac.sdu.lcid', 'mac.sdu.tbs', 'mac.sdu.frame', 'mac.sdu.slot', 'mac.sdu.timestamp', 'mac.sdu.length', 'mac.sdu.M2buf', 'rlc.resegment.old_leno', 'rlc.resegment.old_so', 'rlc.resegment.other_seg_leno', 'rlc.resegment.other_seg_so', 'rlc.resegment.pdu_header_len', 'rlc.resegment.pdu_len']
+        # find all attempts with timestamps less than this
+
+        repeated_ue_rlc_segments = self.ue_rlc_segments_df[
+            (self.ue_rlc_segments_df['mac.sdu.timestamp'] < end_ts) &
+            (self.ue_rlc_segments_df['mac.sdu.timestamp'] >= begin_ts) &
+            (self.ue_rlc_segments_df['rlc.txpdu.retx'] == True)
+        ]
+        num_repeated_ue_rlc_segments = repeated_ue_rlc_segments.shape[0]
+        logger.info(f"Number of repeated UE RLC segments discovered: {num_repeated_ue_rlc_segments}")
+        return [ dict(repeated_ue_rlc_segments.iloc[j]) for j in range(num_repeated_ue_rlc_segments) ]
