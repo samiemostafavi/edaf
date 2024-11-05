@@ -103,9 +103,9 @@ def find_sched_events(previous_lines : RingBuffer, lines):
                 prev_lines = previous_lines.reverse_items()
 
                 # decode the cause of scheduling for this segment
-                # sched.cause--sched.ue rntif58e.type1.buf142.sched63.fm206.sl1.fmtx206.sltx7
-                # sched.cause--sched.ue rntif58e.type2.fm124.sl1.fmtx124.sltx7
-                # sched.cause--sched.ue rntif58e.type3.fm148.sl2.fmtx148.sltx8.diff200
+                # sched.cause--sched.ue rntif58e.type1.buf142.sched63.fm206.sl1.fmtx206.sltx7.hqpid0
+                # sched.cause--sched.ue rntif58e.type2.fm124.sl1.fmtx124.sltx7.hqpid0
+                # sched.cause--sched.ue rntif58e.type3.fm148.sl2.fmtx148.sltx8.diff200.hqpid0
                 # This will give us 3 types of causes that we discover later
                 found_SCHED_CAUSE = False
                 for jd,prev_ljne in enumerate(prev_lines):
@@ -115,11 +115,17 @@ def find_sched_events(previous_lines : RingBuffer, lines):
                         type_match = re.search(r'type(\d+)', prev_ljne)
                         fm_match = re.search(r'fm(\d+)', prev_ljne)
                         sl_match = re.search(r'sl(\d+)', prev_ljne)
+                        hqpid_match = re.search(r'hqpid(\d+)', prev_ljne)
                         if timestamp_match and type_match and fm_match and sl_match:
                             type_value = int(type_match.group(1))
                             timestamp = float(timestamp_match.group(1))
                             sl_cause_value = int(sl_match.group(1))
                             fm_cause_value = int(fm_match.group(1))
+                            # backward compatibility, don't break the code if we can't find the hqpid
+                            if hqpid_match:
+                                hqpid_value = int(hqpid_match.group(1))
+                            else:
+                                hqpid_value = None
                             if type_value == 1:
                                 buf_match = re.search(r'buf(\d+)', prev_ljne)
                                 sched_match = re.search(r'sched(\d+)', prev_ljne)
@@ -149,6 +155,7 @@ def find_sched_events(previous_lines : RingBuffer, lines):
                                 'buf': buf_value,
                                 'sched': sched_value,
                                 'timestamp' : timestamp,
+                                'hqpid':hqpid_value
                             }
                         elif type_value == 2:
                             sched_report[SCHED_CAUSE_STR] = {
@@ -156,6 +163,7 @@ def find_sched_events(previous_lines : RingBuffer, lines):
                                 'frame':fm_cause_value,
                                 'slot':sl_cause_value,
                                 'timestamp' : timestamp,
+                                'hqpid':hqpid_value
                             }
                         elif type_value == 3:
                             sched_report[SCHED_CAUSE_STR] = {
@@ -164,6 +172,7 @@ def find_sched_events(previous_lines : RingBuffer, lines):
                                 'slot':sl_cause_value,
                                 'diff':diff_value,
                                 'timestamp' : timestamp,
+                                'hqpid':hqpid_value
                             }
 
                         logger.debug(f"[GNB] found '{SCHED_CAUSE_STR}', sltx{sltx_value}, fmtx{fmtx_value}, and rnti{rnti_value} in line {line_number-jd-1}, {sched_report[SCHED_CAUSE_STR]}")
