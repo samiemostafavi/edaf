@@ -25,15 +25,22 @@ def find_mac_successful_attempts(previous_lines : RingBuffer, lines):
         # it can be a successful decoded:
         # phy.detectstart ::fm102.sl8.hqpid15.hqround0.Hbuf1527077280
         # phy.detectend suc1.fm102.sl8.hqpid15.hqround0.Hbuf1527077280.ptot559.pn284.pth50
-        # phy.decodeend fm102.sl8.hqpid15.hqround0.Hbuf1527077280.rbb0.rbs5.tbs24
+        # OLD VERSION: phy.decodeend fm102.sl8.hqpid15.hqround0.Hbuf1527077280.rbb0.rbs5.tbs24.mcs9.sb10.ss101 
+        # actually we don't know in OLD VERSION if it was successful or not
+        # NEW VERSION: phy.decodeend suc1.fm162.sl18.hqpid12.hqround0.Hbuf171586176.rbb0.rbs5.tbs24.mcs9.rnti1234
 
-        # or it can be unsuccessful decode:
+        # or it can be unsuccessful detect:
         # phy.detectstart ::fm918.sl8.hqpid9.hqround0.Hbuf1527077280
         # phy.detectend suc0.fm918.sl8.hqpid9.hqround0.Hbuf1527077280.ptot277.pn277.pth50
 
+        # or it can be unsuccessful decode (NEW VERSION):
+        # phy.detectstart ::fm918.sl8.hqpid9.hqround0.Hbuf1527077280
+        # phy.detectend suc1.fm918.sl8.hqpid9.hqround0.Hbuf1527077280.ptot277.pn277.pth50
+        # phy.decodeend suc0.fm162.sl18.hqpid12.hqround0.Hbuf171586176.rbb0.rbs5.tbs24.mcs9.rnti1234
+
         # therefore we first look for 'phy.decodeend'
-        # phy.decodeend fm102.sl8.hqpid15.hqround0.Hbuf1527077280.rbb0.rbs5.tbs24
-        # if suc1, we look for mac.demuxed. otherwise we dont
+        # OLD VERSION: phy.decodeend fm102.sl8.hqpid15.hqround0.Hbuf1527077280.rbb0.rbs5.tbs24.mcs9.sb10.ss101
+        # NEW VERSION: phy.decodeend suc1.fm162.sl18.hqpid12.hqround0.Hbuf171586176.rbb0.rbs5.tbs24.mcs9.rnti1234
         KW_MAC_DEC = 'phy.decodeend'
         if (KW_MAC_DEC in line):
             timestamp_match = re.search(r'^(\d+\.\d+)', line)
@@ -46,9 +53,7 @@ def find_mac_successful_attempts(previous_lines : RingBuffer, lines):
             rbs_match = re.search(r'rbs(\d+)', line)
             tbs_match = re.search(r'tbs(\d+)', line)
             mcs_match = re.search(r'mcs(\d+)', line)
-            sb_match = re.search(r'sb(\d+)', line)
-            ss_match = re.search(r'ss(\d+)', line)
-            if timestamp_match and fm_match and sl_match and hqpid_match and hqround_match and hbuf_match and rbb_match and rbs_match and tbs_match and mcs_match and sb_match and ss_match:
+            if timestamp_match and fm_match and sl_match and hqpid_match and hqround_match and hbuf_match and rbb_match and rbs_match and tbs_match and mcs_match:
                 timestamp = float(timestamp_match.group(1))
                 fm_value = int(fm_match.group(1))
                 sl_value = int(sl_match.group(1))
@@ -59,8 +64,15 @@ def find_mac_successful_attempts(previous_lines : RingBuffer, lines):
                 rbs_value = int(rbs_match.group(1))
                 tbs_value = int(tbs_match.group(1))
                 mcs_value = int(mcs_match.group(1))
-                sb_value = int(sb_match.group(1))
-                ss_value = int(ss_match.group(1))
+                # NEW VERSION, backward compatibility
+                rnti_match = re.search(r'rnti([0-9a-fA-F]+)', line)
+                suc_match = re.search(r'suc(\d+)', line)
+                if rnti_match and suc_match:
+                    rnti_value = rnti_match.group(1)
+                    suc_value = int(suc_match.group(1))
+                else:
+                    rnti_value = None
+                    suc_value = None
             else:
                 logger.warning(f"For {KW_MAC_DEC}, could not find properties in line {line_number}.")
                 continue
@@ -72,8 +84,12 @@ def find_mac_successful_attempts(previous_lines : RingBuffer, lines):
                     'rbs': rbs_value,
                     'tbs': tbs_value,
                     'mcs': mcs_value,
-                    'sb' : sb_value,
-                    'ss' : ss_value
+                    'rnti' : rnti_value,
+                    'suc' : suc_value,
+                    'frame': fm_value,
+                    'slot': sl_value,
+                    'hqpid': hqpid_value,
+                    'hqround': hqround_value
                 }
             }
             logger.debug(f"Found '{KW_MAC_DEC}' in line {line_number}, {mac_dec_arr[KW_MAC_DEC]}")
@@ -122,7 +138,7 @@ def find_mac_successful_attempts(previous_lines : RingBuffer, lines):
 
             if not found_MAC_DETEND:
                 logger.warning(f"[GNB] Could not find '{KW_MAC_DETEND}' before {line_number} for {KW_MAC_DEC}")
-                continue
+                mac_dec_arr[KW_MAC_DETEND] = {}
 
 
             # find 'phy.detectstart'

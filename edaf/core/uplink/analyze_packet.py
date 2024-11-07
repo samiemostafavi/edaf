@@ -57,6 +57,15 @@ class ULPacketAnalyzer:
         # check and report the ue_ip_ids and gnb sns
         logger.success(f"Imported database '{db_addr}', with UE IDs ranging from {self.ue_ip_packets_df['ip_id'].min()} to {self.ue_ip_packets_df['ip_id'].max()}, and GNB SNs ranging from {self.gnb_ip_packets_df['gtp.out.sn'].min()} to {self.gnb_ip_packets_df['gtp.out.sn'].max()}")
 
+    def figure_packet_arrivals_from_ts(self, ts_begin, ts_end):
+
+        ueippackets = self.ue_ip_packets_df[
+            (self.ue_ip_packets_df['ip.in.timestamp'] <= ts_end) &
+            (self.ue_ip_packets_df['ip.in.timestamp'] >= ts_begin)
+        ]     
+        return [ dict(ueippackets.iloc[i]) for i in range(ueippackets.shape[0]) ]
+
+
     def figure_packettx_from_ts(self, ts_begin, ts_end):
 
         poss_ueippackets = self.ue_ip_packets_df[
