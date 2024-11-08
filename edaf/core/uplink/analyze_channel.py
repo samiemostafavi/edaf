@@ -52,7 +52,6 @@ class ULChannelAnalyzer:
             (self.gnb_mcs_reports_df['timestamp'] >= begin_ts)
         ]
         num_mcs_reports = gnb_mcs_reports.shape[0]
-        logger.info(f"Number of GNB mcs reports discovered: {num_mcs_reports}")
 
         res_arr = []
         for j in range(num_mcs_reports):
