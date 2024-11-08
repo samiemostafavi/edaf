@@ -574,6 +574,10 @@ class ULChannelAnalyzer:
             (self.ue_rlc_segments_df['rlc.txpdu.retx'] == True)
         ]
 
+        # in the end, we filter out the repeated ones
+        # so create a set of ids
+        unique_txpdu_ids = set()
+
         num_repeated_ue_rlc_segments = repeated_ue_rlc_segments.shape[0]
         logger.info(f"Number of repeated UE RLC segments discovered: {num_repeated_ue_rlc_segments}")
         results = []
@@ -600,6 +604,9 @@ class ULChannelAnalyzer:
             parent_of_the_rlc_segment['ue_mac_attempt_0'] = self.find_ue_mac_attempt_from_ue_rlc(parent_of_the_rlc_segment)
 
             # for this parent_of_the_rlc_segment, find the last harq attempt
-            results.append(parent_of_the_rlc_segment)
+            if int(parent_of_the_rlc_segment['txpdu_id']) not in unique_txpdu_ids:
+                results.append(parent_of_the_rlc_segment)
+                unique_txpdu_ids.add(int(parent_of_the_rlc_segment['txpdu_id']))
 
+        logger.info(f"Number of unique failed UE RLC segments discovered: {len(results)}")
         return results

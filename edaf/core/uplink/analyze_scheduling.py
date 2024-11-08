@@ -47,6 +47,8 @@ class ULSchedulingAnalyzer:
 
         self.gnb_sched_reports_df = pd.read_sql('SELECT * FROM gnb_sched_reports', conn)
         logger.info(f"gnb_sched_reports_df: {self.gnb_sched_reports_df.columns.tolist()}")
+        # add schedule_id to gnb_sched_reports_df
+        self.gnb_sched_reports_df['schedule_id'] = self.gnb_sched_reports_df.index
 
         self.ue_ip_packets_df = pd.read_sql('SELECT * FROM ue_ip_packets', conn)
         logger.info(f"ue_ip_packets_df: {self.ue_ip_packets_df.columns.tolist()}")
