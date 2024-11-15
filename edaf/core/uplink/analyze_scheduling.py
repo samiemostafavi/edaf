@@ -538,3 +538,33 @@ class ULSchedulingAnalyzer:
 
             return ue_mac_attempt
     
+
+    def find_gnb_schedule_from_ue_mac_attempt(self, ue_mac_attempt : dict, SCHED_OFFSET_S : float) -> dict:
+            
+            SCHED_GNB_MAC_UE_MATCH_MS = 5
+
+            # gnb_sched_reports_df: ['sched.ue.rnti', 'sched.ue.frame', 'sched.ue.slot', 'sched.ue.frametx', 'sched.ue.slottx', 'sched.ue.tbs', 'sched.ue.mcs', 'sched.ue.timestamp', 'sched.ue.rbs', 'sched.cause.type', 'sched.cause.frame', 'sched.cause.slot', 'sched.cause.diff', 'sched.cause.timestamp', 'sched.cause.buf', 'sched.cause.sched', 'sched.cause.hqround', 'sched.cause.hqpid']
+            # find scheduled timestamp
+            # ue_mac_attempts_df: ['mac_id', 'phy.tx.timestamp', 'phy.tx.Hbuf', 'phy.tx.rvi', 'phy.tx.fm', 'phy.tx.sl', 'phy.tx.nb_rb', 'phy.tx.nb_sym', 'phy.tx.mod_or', 'phy.tx.len', 'phy.tx.rnti', 'phy.tx.hqpid', 'mac.harq.timestamp', 'mac.harq.hqpid', 'mac.harq.rvi', 'mac.harq.len', 'mac.harq.ndi', 'mac.harq.M3buf']
+
+            # find the corresponding gnb schedule
+            gnb_sched_reports_list = self.gnb_sched_reports_df[
+                (self.gnb_sched_reports_df['sched.ue.frametx'] == ue_mac_attempt['phy.tx.fm']) &
+                (self.gnb_sched_reports_df['sched.ue.slottx'] == ue_mac_attempt['phy.tx.sl']) &
+                (self.gnb_sched_reports_df['sched.cause.hqpid'] == ue_mac_attempt['mac.harq.hqpid']) &
+                (self.gnb_sched_reports_df['sched.ue.rnti'] == ue_mac_attempt['phy.tx.rnti'])
+            ]
+            gnb_sched_report = {}
+            if gnb_sched_reports_list.shape[0] > 0:
+                for k in range(gnb_sched_reports_list.shape[0]):
+                    pot_gnb_sched_report = gnb_sched_reports_list.iloc[k]
+                    # find scheduled timestamp
+                    abs_sltx_po = int(pot_gnb_sched_report[f'sched.ue.frametx'])*self.conf_slots_per_frame +int(pot_gnb_sched_report[f'sched.ue.slottx'])
+                    abs_sl_po = int(pot_gnb_sched_report[f'sched.ue.frame'])*self.conf_slots_per_frame +int(pot_gnb_sched_report[f'sched.ue.slot'])
+                    sltx_tsdif_ms = (abs_sltx_po - abs_sl_po)*self.conf_slots_duration_ms
+                    scheduled_timestamp = pot_gnb_sched_report['sched.ue.timestamp']+sltx_tsdif_ms/1000+SCHED_OFFSET_S
+                    if abs(ue_mac_attempt['phy.tx.timestamp'] - scheduled_timestamp)*1000 < SCHED_GNB_MAC_UE_MATCH_MS:
+                        gnb_sched_report = dict(pot_gnb_sched_report)
+                        break
+
+            return gnb_sched_report

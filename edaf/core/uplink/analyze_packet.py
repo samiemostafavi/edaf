@@ -17,6 +17,9 @@ class ULPacketAnalyzer:
         self.nlmt_df = pd.read_sql('SELECT * FROM nlmt_ip_packets', conn)
         logger.info(f"nlmt_df: {self.nlmt_df.columns.tolist()}")
 
+        self.gnb_mcs_reports_df = pd.read_sql('SELECT * FROM gnb_mcs_reports', conn)
+        logger.info(f"gnb_mcs_reports_df: {self.gnb_mcs_reports_df.columns.tolist()}")
+
         self.gnb_ip_packets_df = pd.read_sql('SELECT * FROM gnb_ip_packets', conn)
         logger.info(f"gnb_ip_packets_df: {self.gnb_ip_packets_df.columns.tolist()}")
 
@@ -92,7 +95,8 @@ class ULPacketAnalyzer:
         sorted_ids_list = [ di['id'] for di in sorted_ids_ts_list ]
 
         # then do the actual work
-        for ip_id in sorted_ids_list:
+        for idx, ip_id in enumerate(sorted_ids_list):
+            print(f"\rProcessing packet {idx + 1}/{len(sorted_ids_list)} ({(idx + 1) / len(sorted_ids_list) * 100:.2f}%) with ip_id: {ip_id}", end="")
             ue_ip_row = self.ue_ip_packets_df[self.ue_ip_packets_df['ip_id'] == ip_id].iloc[0]
             filtered_df = self.ue_iprlc_rel_df[self.ue_iprlc_rel_df['ip_id'] == ip_id]
             sn_set = set()
@@ -156,6 +160,7 @@ class ULPacketAnalyzer:
             packet = self.figure_rlc_attempts(packet, gnb_rlc_rows, ue_rlc_rows)
             packets.append(packet)
 
+        print("\n", end="")
         return packets
 
     def figure_mac_attempts(self, rlcattempt, ue_rlc_row, ue_ip_in_ts, ue_ip_out_ts):
@@ -178,21 +183,25 @@ class ULPacketAnalyzer:
             logger.error(f"No UE MAC attempts found for the UE RLC attempt {dict(ue_rlc_row)}.")
             return rlcattempt
         
+        sorted_poss_mac_attempt_0s = poss_mac_attempt_0s.sort_values(by='phy.tx.timestamp', ascending=True, inplace=False)
+
         mac_attempt_0 = None
         attempt_found = False
-        for i in range(poss_mac_attempt_0s.shape[0]):
-            poss_mac_attempt_0 = poss_mac_attempt_0s.iloc[i]
+        for i in range(sorted_poss_mac_attempt_0s.shape[0]):
+            poss_mac_attempt_0 = sorted_poss_mac_attempt_0s.iloc[i]
             if (poss_mac_attempt_0['mac.harq.M3buf'] <= m2buf) and \
                 ((m2buf+m2len) <= (poss_mac_attempt_0['mac.harq.M3buf']+poss_mac_attempt_0['mac.harq.len'])) and \
                 ( abs(poss_mac_attempt_0['phy.tx.timestamp']-ue_rlc_row['rlc.txpdu.timestamp']) < CLOSENESS_SECONDS ) :
                 
-                mac_attempt_0 = poss_mac_attempt_0s.iloc[i]
+                mac_attempt_0 = sorted_poss_mac_attempt_0s.iloc[i]
                 attempt_found = True
                 break
 
         if not attempt_found:
             logger.error(f"No UE MAC attempts found for the UE RLC attempt {dict(ue_rlc_row)}.")
             return rlcattempt
+
+        # ue_mac_attempts_df: ['mac_id', 'phy.tx.timestamp', 'phy.tx.Hbuf', 'phy.tx.rvi', 'phy.tx.fm', 'phy.tx.sl', 'phy.tx.nb_rb', 'phy.tx.nb_sym', 'phy.tx.mod_or', 'phy.tx.len', 'phy.tx.rnti', 'phy.tx.hqpid', 'mac.harq.timestamp', 'mac.harq.hqpid', 'mac.harq.rvi', 'mac.harq.len', 'mac.harq.ndi', 'mac.harq.M3buf']
 
         hq = mac_attempt_0['phy.tx.hqpid']
         at_0_ts = float(mac_attempt_0['phy.tx.timestamp'])
@@ -223,6 +232,22 @@ class ULPacketAnalyzer:
         for j in range(num_ue_mac_attempts):
             ue_mac_attempt = ue_mac_attempts.iloc[j]
 
+            # find MCS index
+            # find closest mcs item in mcs_df in terms of timestamp
+            # mcs item: ['timestamp', 'frame', 'slot', 'frametx', 'slottx', 'rnti', 'mcs']
+            mac_mcs_value = 0
+            gnb_mcs_reports = self.gnb_mcs_reports_df[
+                (self.gnb_mcs_reports_df['frametx'] == ue_mac_attempt['phy.tx.fm']) &
+                (self.gnb_mcs_reports_df['slottx'] == ue_mac_attempt['phy.tx.sl']) &
+                (self.gnb_mcs_reports_df['rnti'] == ue_mac_attempt['phy.tx.rnti'])
+            ]
+            for k in range(gnb_mcs_reports.shape[0]):
+                gnb_pot_mcs_attempt = gnb_mcs_reports.iloc[k]
+                if abs(gnb_pot_mcs_attempt['timestamp'] - ue_mac_attempt['phy.tx.timestamp']) < 0.02:
+                    mac_mcs_value = gnb_pot_mcs_attempt['mcs']
+                    break
+
+            # set the rest of the mac attempt
             macattempt = {
                 'len' : ue_mac_attempt['phy.tx.len'],
                 'id' : ue_mac_attempt['mac_id'],
@@ -231,17 +256,24 @@ class ULPacketAnalyzer:
                 'slot' : int(ue_mac_attempt[f'phy.tx.sl']),
                 'hqpid' : int(ue_mac_attempt[f'phy.tx.hqpid']),
                 'phy.in_t' : float(ue_mac_attempt[f'phy.tx.timestamp']),
+                'rbs' : int(ue_mac_attempt[f'phy.tx.nb_rb']),
+                'symbols' : int(ue_mac_attempt[f'phy.tx.nb_sym']),
+                'mcs' : int(mac_mcs_value),
+                'phy.decode_t' : None,
                 'phy.out_t' : None,
                 'acked' : False,
                 'hqround' : None,
                 'next_id' : None,
                 'prev_id' : None,
             }
+            rlcattempt['rnti'] = ue_mac_attempt['phy.tx.rnti']
 
             # now we can find the corresponding mac attempt on gnb side
+            # gnb_mac_attempts_df: ['phy.decodeend.timestamp', 'phy.decodeend.rbb', 'phy.decodeend.rbs', 'phy.decodeend.tbs', 'phy.decodeend.mcs', 'phy.decodeend.rnti', 'phy.decodeend.suc', 'phy.decodeend.frame', 'phy.decodeend.slot', 'phy.decodeend.hqpid', 'phy.decodeend.hqround', 'phy.detectend.timestamp', 'phy.detectend.frame', 'phy.detectend.slot', 'phy.detectend.hqpid', 'phy.detectend.hqround', 'phy.detectend.hbuf', 'phy.detectend.ptot', 'phy.detectend.pn', 'phy.detectend.pth', 'phy.detectend.suc', 'phy.detectstart.timestamp', 'phy.decodeend.sb', 'phy.decodeend.ss']
             gnb_mac_attempt_arr = self.gnb_mac_attempts_df[
                 (self.gnb_mac_attempts_df['phy.detectend.frame'] == ue_mac_attempt['phy.tx.fm']) &
                 (self.gnb_mac_attempts_df['phy.detectend.slot'] == ue_mac_attempt['phy.tx.sl']) &
+                (self.gnb_mac_attempts_df['phy.decodeend.rnti'] == ue_mac_attempt['phy.tx.rnti']) &
                 (self.gnb_mac_attempts_df['phy.detectend.hqpid'] == ue_mac_attempt['phy.tx.hqpid'])
             ]
             
@@ -263,30 +295,33 @@ class ULPacketAnalyzer:
                     pass
                 else:
                     # possibly successful harq attempt
-                    macattempt['phy.out_t'] = float(gnb_mac_attempt['phy.decodeend.timestamp'])
-                    hq_s = int(gnb_mac_attempt['phy.detectend.hqpid'])
-                    fm_s = int(gnb_mac_attempt['phy.detectend.frame'])
-                    sl_s = int(gnb_mac_attempt['phy.detectend.slot'])
+                    macattempt['phy.decode_t'] = float(gnb_mac_attempt['phy.decodeend.timestamp'])
+                    if gnb_mac_attempt['phy.decodeend.suc']:
+                        # possibly successful gnb harq attempt
 
-                    # find rlc segment of this mac attempt
-                    # use hq_s, fm_s, and sl_s which belong to the last mac attempt
-                    # the possible hq, fm, and sl of that rlc segment in gnb
-                    gnb_rlc_segment_arr = self.gnb_rlc_segments_df[
-                        (self.gnb_rlc_segments_df['rlc.decoded.frame'] == fm_s) &
-                        (self.gnb_rlc_segments_df['rlc.decoded.slot'] == sl_s) &
-                        (self.gnb_rlc_segments_df['rlc.decoded.hqpid'] == hq_s)
-                    ]
+                        macattempt['phy.out_t'] = float(gnb_mac_attempt['phy.decodeend.timestamp']) 
+                        hq_s = int(gnb_mac_attempt['phy.detectend.hqpid'])
+                        fm_s = int(gnb_mac_attempt['phy.detectend.frame'])
+                        sl_s = int(gnb_mac_attempt['phy.detectend.slot'])
 
-                    if gnb_rlc_segment_arr.shape[0] >= 1:
-                        logger.debug(f"UE RLC attempt {rlcattempt['id']} - found {gnb_rlc_segment_arr.shape[0]} (more than one) possible gnb rlc segment matches. We pick the one closer than {CLOSENESS_SECONDS} seconds.")
-                        for k in range(gnb_rlc_segment_arr.shape[0]):
-                            pot_gnb_seg = gnb_rlc_segment_arr.iloc[k]
-                            if abs(pot_gnb_seg['rlc.reassembled.timestamp']-gnb_mac_attempt['phy.decodeend.timestamp']) < CLOSENESS_SECONDS:
-                                gnb_rlc_segment = pot_gnb_seg
-                                rlcattempt['mac.out_t'] = gnb_rlc_segment['rlc.reassembled.timestamp']
-                                rlcattempt['rnti'] = gnb_rlc_segment['rlc.decoded.rnti']
-                                rlcattempt['acked'] = True
-                                break
+                        # find rlc segment of this mac attempt
+                        # use hq_s, fm_s, and sl_s which belong to the last mac attempt
+                        # the possible hq, fm, and sl of that rlc segment in gnb
+                        gnb_rlc_segment_arr = self.gnb_rlc_segments_df[
+                            (self.gnb_rlc_segments_df['rlc.decoded.frame'] == fm_s) &
+                            (self.gnb_rlc_segments_df['rlc.decoded.slot'] == sl_s) &
+                            (self.gnb_rlc_segments_df['rlc.decoded.hqpid'] == hq_s)
+                        ]
+
+                        if gnb_rlc_segment_arr.shape[0] >= 1:
+                            logger.debug(f"UE RLC attempt {rlcattempt['id']} - found {gnb_rlc_segment_arr.shape[0]} (more than one) possible gnb rlc segment matches. We pick the one closer than {CLOSENESS_SECONDS} seconds.")
+                            for k in range(gnb_rlc_segment_arr.shape[0]):
+                                pot_gnb_seg = gnb_rlc_segment_arr.iloc[k]
+                                if abs(pot_gnb_seg['rlc.reassembled.timestamp']-gnb_mac_attempt['phy.decodeend.timestamp']) < CLOSENESS_SECONDS:
+                                    gnb_rlc_segment = pot_gnb_seg
+                                    rlcattempt['mac.out_t'] = gnb_rlc_segment['rlc.reassembled.timestamp']
+                                    rlcattempt['acked'] = True
+                                    break
 
             rlcattempt['mac.attempts'].append(macattempt)
 
@@ -306,28 +341,27 @@ class ULPacketAnalyzer:
     def figure_rlc_attempts(self, packet, gnb_rlc_rows, ue_rlc_rows):
 
         # Get the number of rlc segments
-        num_rlc_segments = len(gnb_rlc_rows)
-        logger.debug(f"Number of gnb RLC segments {num_rlc_segments}")
+        num_gnb_rlc_segments = len(gnb_rlc_rows)
+        logger.debug(f"Number of gnb RLC segments {num_gnb_rlc_segments}")
 
         # Get the number of rlc attempts
-        num_rlc_attempts = len(ue_rlc_rows)
-        logger.debug(f"Number of ue RLC attempts {num_rlc_attempts}")
+        num_ue_rlc_attempts = len(ue_rlc_rows)
+        logger.debug(f"Number of ue RLC attempts {num_ue_rlc_attempts}")
 
-        # Iterate over each rlc attempt
-        for i in range(num_rlc_attempts):
+        # Iterate over each ue rlc attempt
+        # ue_rlc_segments_df: ['txpdu_id', 'rlc.txpdu.M1buf', 'rlc.txpdu.R2buf', 'rlc.txpdu.sn', 'rlc.txpdu.srn', 'rlc.txpdu.so', 'rlc.txpdu.tbs', 'rlc.txpdu.timestamp', 'rlc.txpdu.length', 'rlc.txpdu.leno', 'rlc.txpdu.ENTno', 'rlc.txpdu.retx', 'rlc.txpdu.retxc', 'rlc.report.timestamp', 'rlc.report.num', 'rlc.report.ack', 'rlc.report.tpollex', 'mac.sdu.lcid', 'mac.sdu.tbs', 'mac.sdu.frame', 'mac.sdu.slot', 'mac.sdu.timestamp', 'mac.sdu.length', 'mac.sdu.M2buf', 'rlc.resegment.old_leno', 'rlc.resegment.old_so', 'rlc.resegment.other_seg_leno', 'rlc.resegment.other_seg_so', 'rlc.resegment.pdu_header_len', 'rlc.resegment.pdu_len']
+        for i in range(num_ue_rlc_attempts):
             rlcattempt = {
                 'id' : i,
                 'so' : int(ue_rlc_rows[i]['rlc.txpdu.so']),
                 'len' : int(ue_rlc_rows[i]['rlc.txpdu.leno']),
-                'rep_acked' : bool(ue_rlc_rows[i]['rlc.report.ack']),
-                'resegment' : (ue_rlc_rows[i]['rlc.resegment.old_leno'], ue_rlc_rows[i]['rlc.resegment.old_so'], ue_rlc_rows[i]['rlc.resegment.other_seg_leno'], ue_rlc_rows[i]['rlc.resegment.other_seg_so']),
-                'repeated' : False,
                 'mac.in_t' : None,
                 'mac.out_t' : None,
                 'rnti' : None,
                 'frame' : None,
                 'slot' : None,
                 'acked' : False,
+                'repeated' : False,
                 'mac.attempts' : [],
             }
             rlcattempt['mac.in_t'] = ue_rlc_rows[i]['rlc.txpdu.timestamp']
