@@ -158,6 +158,34 @@ class ULSchedulingAnalyzer:
 
         return schedules_arr
 
+    def find_frame_start_ts_from_ts(self, 
+        timestamp, 
+        SCHED_OFFSET_S = 0 # 4*SLOT_DURATION_S #2ms or 4 slots is this sl_ahead?
+    ):
+
+        NUM_SLOTS_PER_FRAME = self.conf_slots_per_frame
+        SLOT_DURATION_S = self.conf_slots_duration_ms/1000
+        CLOSENESS_LIMIT_S = SLOT_DURATION_S*NUM_SLOTS_PER_FRAME #10ms (one full frame)
+
+        # find the closest sched.pr map prior to this timestamp
+        # bring all sched.map.pr within this frame (10ms earlier)
+        maps = self.gnb_sched_maps_df[
+            ( self.gnb_sched_maps_df['sched.map.pr.timestamp'] >= timestamp-(CLOSENESS_LIMIT_S) ) &
+            ( self.gnb_sched_maps_df['sched.map.pr.timestamp'] < timestamp )
+        ]
+        if maps.shape[0] == 0:
+            logger.error("Did not find any scheduling map for this interval.")
+            return (None, None)
+        
+        # sort them by timestamp
+        maps = maps.sort_values(by='sched.map.pr.timestamp', ascending=True)
+
+        # just pick the first one
+        pr_map_row = maps.iloc[0]
+
+        return float(pr_map_row['sched.map.pr.timestamp']+SCHED_OFFSET_S)
+
+
     def find_frame_slot_from_ts(self, 
         timestamp, 
         SCHED_OFFSET_S = 0 # 4*SLOT_DURATION_S #2ms or 4 slots is this sl_ahead?
