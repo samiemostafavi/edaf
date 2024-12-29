@@ -175,7 +175,7 @@ class ULSchedulingAnalyzer:
         ]
         if maps.shape[0] == 0:
             logger.error("Did not find any scheduling map for this interval.")
-            return (None, None)
+            return (None, None, None)
         
         # sort them by timestamp
         maps = maps.sort_values(by='sched.map.pr.timestamp', ascending=True)
