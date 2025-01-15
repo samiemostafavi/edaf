@@ -31,48 +31,50 @@ class ULSchedulingAnalyzer:
 
         # Read each table from the SQLite database into pandas DataFrames
         self.gnb_ip_packets_df = pd.read_sql('SELECT * FROM gnb_ip_packets', conn)
-        logger.info(f"gnb_ip_packets_df: {self.gnb_ip_packets_df.columns.tolist()}")
+        logger.debug(f"gnb_ip_packets_df: {self.gnb_ip_packets_df.columns.tolist()}")
 
         self.gnb_rlc_segments_df = pd.read_sql('SELECT * FROM gnb_rlc_segments', conn)
-        logger.info(f"gnb_rlc_segments_df: {self.gnb_rlc_segments_df.columns.tolist()}")
+        logger.debug(f"gnb_rlc_segments_df: {self.gnb_rlc_segments_df.columns.tolist()}")
 
         self.gnb_iprlc_rel_df = pd.read_sql('SELECT * FROM gnb_iprlc_rel', conn)
-        logger.info(f"gnb_iprlc_rel_df: {self.gnb_iprlc_rel_df.columns.tolist()}")
+        logger.debug(f"gnb_iprlc_rel_df: {self.gnb_iprlc_rel_df.columns.tolist()}")
 
         self.gnb_mac_attempts_df = pd.read_sql('SELECT * FROM gnb_mac_attempts', conn)
-        logger.info(f"gnb_mac_attempts_df: {self.gnb_mac_attempts_df.columns.tolist()}")
+        logger.debug(f"gnb_mac_attempts_df: {self.gnb_mac_attempts_df.columns.tolist()}")
 
         self.gnb_sched_maps_df = pd.read_sql('SELECT * FROM gnb_sched_maps', conn)
-        logger.info(f"gnb_sched_maps_df: {self.gnb_sched_maps_df.columns.tolist()}")
+        logger.debug(f"gnb_sched_maps_df: {self.gnb_sched_maps_df.columns.tolist()}")
 
         self.gnb_sched_reports_df = pd.read_sql('SELECT * FROM gnb_sched_reports', conn)
-        logger.info(f"gnb_sched_reports_df: {self.gnb_sched_reports_df.columns.tolist()}")
+        logger.debug(f"gnb_sched_reports_df: {self.gnb_sched_reports_df.columns.tolist()}")
         # add schedule_id to gnb_sched_reports_df
         self.gnb_sched_reports_df['schedule_id'] = self.gnb_sched_reports_df.index
 
         self.ue_ip_packets_df = pd.read_sql('SELECT * FROM ue_ip_packets', conn)
-        logger.info(f"ue_ip_packets_df: {self.ue_ip_packets_df.columns.tolist()}")
+        logger.debug(f"ue_ip_packets_df: {self.ue_ip_packets_df.columns.tolist()}")
 
         self.ue_rlc_segments_df = pd.read_sql('SELECT * FROM ue_rlc_segments', conn)
-        logger.info(f"ue_rlc_segments_df: {self.ue_rlc_segments_df.columns.tolist()}")
+        logger.debug(f"ue_rlc_segments_df: {self.ue_rlc_segments_df.columns.tolist()}")
 
         self.ue_mac_attempts_df = pd.read_sql('SELECT * FROM ue_mac_attempts', conn)
-        logger.info(f"ue_mac_attempts_df: {self.ue_mac_attempts_df.columns.tolist()}")
+        logger.debug(f"ue_mac_attempts_df: {self.ue_mac_attempts_df.columns.tolist()}")
 
         self.ue_uldcis_df = pd.read_sql('SELECT * FROM ue_uldcis', conn)
-        logger.info(f"ue_uldcis_df: {self.ue_uldcis_df.columns.tolist()}")
+        logger.debug(f"ue_uldcis_df: {self.ue_uldcis_df.columns.tolist()}")
 
         self.ue_iprlc_rel_df = pd.read_sql('SELECT * FROM ue_iprlc_rel', conn)
-        logger.info(f"ue_iprlc_rel_df: {self.ue_iprlc_rel_df.columns.tolist()}")
+        logger.debug(f"ue_iprlc_rel_df: {self.ue_iprlc_rel_df.columns.tolist()}")
 
         self.ue_srtxs_df = pd.read_sql('SELECT * FROM ue_srtxs', conn)
-        logger.info(f"ue_srtxs_df: {self.ue_srtxs_df.columns.tolist()}")
+        logger.debug(f"ue_srtxs_df: {self.ue_srtxs_df.columns.tolist()}")
 
         self.ue_bsrupds_df = pd.read_sql('SELECT * FROM ue_bsrupds', conn)
-        logger.info(f"ue_bsrupds_df: {self.ue_bsrupds_df.columns.tolist()}")
+        logger.debug(f"ue_bsrupds_df: {self.ue_bsrupds_df.columns.tolist()}")
 
         self.ue_bsrtxs_df = pd.read_sql('SELECT * FROM ue_bsrtxs', conn)
-        logger.info(f"ue_bsrtxs_df: {self.ue_bsrtxs_df.columns.tolist()}")
+        logger.debug(f"ue_bsrtxs_df: {self.ue_bsrtxs_df.columns.tolist()}")
+
+        logger.info(f"Database '{db_addr}' imported successfully.")
 
         conn.close()
 
@@ -194,7 +196,7 @@ class ULSchedulingAnalyzer:
         MAX_NUM_FRAMES = self.conf_max_num_frames
         NUM_SLOTS_PER_FRAME = self.conf_slots_per_frame
         SLOT_DURATION_S = self.conf_slots_duration_ms/1000
-        CLOSENESS_LIMIT_S = 0.01 #10ms
+        CLOSENESS_LIMIT_S = 0.05 #50ms
 
         # find the closest sched.pr map to this timestamp
         # bring all sched.map.pr within this frame (10ms earlier)

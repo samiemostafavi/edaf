@@ -15,34 +15,36 @@ class ULPacketAnalyzer:
         # Read each table from the SQLite database into pandas DataFrames
 
         self.nlmt_df = pd.read_sql('SELECT * FROM nlmt_ip_packets', conn)
-        logger.info(f"nlmt_df: {self.nlmt_df.columns.tolist()}")
+        logger.debug(f"nlmt_df: {self.nlmt_df.columns.tolist()}")
 
         self.gnb_mcs_reports_df = pd.read_sql('SELECT * FROM gnb_mcs_reports', conn)
-        logger.info(f"gnb_mcs_reports_df: {self.gnb_mcs_reports_df.columns.tolist()}")
+        logger.debug(f"gnb_mcs_reports_df: {self.gnb_mcs_reports_df.columns.tolist()}")
 
         self.gnb_ip_packets_df = pd.read_sql('SELECT * FROM gnb_ip_packets', conn)
-        logger.info(f"gnb_ip_packets_df: {self.gnb_ip_packets_df.columns.tolist()}")
+        logger.debug(f"gnb_ip_packets_df: {self.gnb_ip_packets_df.columns.tolist()}")
 
         self.gnb_rlc_segments_df = pd.read_sql('SELECT * FROM gnb_rlc_segments', conn)
-        logger.info(f"gnb_rlc_segments_df: {self.gnb_rlc_segments_df.columns.tolist()}")
+        logger.debug(f"gnb_rlc_segments_df: {self.gnb_rlc_segments_df.columns.tolist()}")
 
         self.gnb_iprlc_rel_df = pd.read_sql('SELECT * FROM gnb_iprlc_rel', conn)
-        logger.info(f"gnb_iprlc_rel_df: {self.gnb_iprlc_rel_df.columns.tolist()}")
+        logger.debug(f"gnb_iprlc_rel_df: {self.gnb_iprlc_rel_df.columns.tolist()}")
 
         self.gnb_mac_attempts_df = pd.read_sql('SELECT * FROM gnb_mac_attempts', conn)
-        logger.info(f"gnb_mac_attempts_df: {self.gnb_mac_attempts_df.columns.tolist()}")
+        logger.debug(f"gnb_mac_attempts_df: {self.gnb_mac_attempts_df.columns.tolist()}")
 
         self.ue_ip_packets_df = pd.read_sql('SELECT * FROM ue_ip_packets', conn)
-        logger.info(f"ue_ip_packets_df: {self.ue_ip_packets_df.columns.tolist()}")
+        logger.debug(f"ue_ip_packets_df: {self.ue_ip_packets_df.columns.tolist()}")
 
         self.ue_rlc_segments_df = pd.read_sql('SELECT * FROM ue_rlc_segments', conn)
-        logger.info(f"ue_rlc_segments_df: {self.ue_rlc_segments_df.columns.tolist()}")
+        logger.debug(f"ue_rlc_segments_df: {self.ue_rlc_segments_df.columns.tolist()}")
 
         self.ue_mac_attempts_df = pd.read_sql('SELECT * FROM ue_mac_attempts', conn)
-        logger.info(f"ue_mac_attempts_df: {self.ue_mac_attempts_df.columns.tolist()}")
+        logger.debug(f"ue_mac_attempts_df: {self.ue_mac_attempts_df.columns.tolist()}")
 
         self.ue_iprlc_rel_df = pd.read_sql('SELECT * FROM ue_iprlc_rel', conn)
-        logger.info(f"ue_iprlc_rel_df: {self.ue_iprlc_rel_df.columns.tolist()}")
+        logger.debug(f"ue_iprlc_rel_df: {self.ue_iprlc_rel_df.columns.tolist()}")
+
+        logger.info(f"Database '{db_addr}' imported successfully.")
 
         conn.close()
 
