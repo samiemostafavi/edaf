@@ -4,8 +4,8 @@ from loguru import logger
 from multiprocessing import Process, Queue
 
 from edaf.core.common.timestamp import rdtsctotsOnline
-from edaf.core.uplink.gnb import ProcessULGNB
-from edaf.core.uplink.ue import ProcessULUE
+from edaf.core.uplink.gnb.gnb import ProcessULGNB
+from edaf.core.uplink.ue.ue import ProcessULUE
 from edaf.core.uplink.nlmt import process_ul_nlmt
 from edaf.core.uplink.combine import CombineUL
 from edaf.core.uplink.decompose import process_ul_journeys
@@ -105,10 +105,10 @@ def pop_q_items(items_queue : multiprocessing.Queue):
         items.append(items_queue.get())
     return items
 
-def combine_journeys(upf_journeys_queue, gnb_journeys_queue, ue_journeys_queue, config):
+def combine_journeys(upf_journeys_queue, gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue, ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue, config):
 
     # set standalone var
-    if (gnb_journeys_queue is None) and (ue_journeys_queue is None):
+    if (gnb_ip_packets_queue is None) and (ue_ip_packets_queue is None):
         standalone = True
     else:
         standalone = False
@@ -187,15 +187,39 @@ def combine_journeys(upf_journeys_queue, gnb_journeys_queue, ue_journeys_queue, 
             logger.warning(traceback.format_exc())
 
 
-def queue_process(client_name, config, rawdata_queue, journeys_queue):
+def queue_process(
+            client_name, config, 
+            rawdata_queue, 
+            ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue,
+            gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue,
+            upf_journeys_queue
+        ):
 
     stats_dropped_lines = 0
     stats_rcv_lines = 0
-    stats_published_journeys = 0
-    stats_dropped_journeys = 0
+    
+    stats_published_upf_journeys = 0
+    stats_dropped_upf_journeys = 0
+
+    stats_published_ue_ip_packets = 0
+    stats_dropped_ue_ip_packets = 0
+    stats_published_ue_rlc_segments = 0
+    stats_dropped_ue_rlc_segments = 0
+    stats_published_ue_mac_attempts = 0
+    stats_dropped_ue_mac_attempts = 0
+
+    stats_published_gnb_ip_packets = 0
+    stats_dropped_gnb_ip_packets = 0
+    stats_published_gnb_rlc_segments = 0
+    stats_dropped_gnb_rlc_segments = 0
+    stats_published_gnb_mac_attempts = 0
+    stats_dropped_gnb_mac_attempts = 0
+    stats_published_gnb_mcs_reports = 0
+    stats_dropped_gnb_mcs_reports = 0
+
     start_time = time.time()
 
-    if (rawdata_queue is None) or (journeys_queue is None):
+    if (rawdata_queue is None) or (upf_journeys_queue is None):
         return
 
     if client_name == 'UE':
@@ -225,43 +249,116 @@ def queue_process(client_name, config, rawdata_queue, journeys_queue):
             if len(raw_inputs) >= ITEMS_PROCESS_LIMIT:
                 # update stats
                 stats_rcv_lines = stats_rcv_lines + len(raw_inputs)
-                if client_name == 'UE' or client_name == 'GNB':
-                    l1lines = rdts.return_rdtsctots(raw_inputs)
-                    if client_name == 'UE':
-                        l1lines.reverse()
-                    if len(l1lines) > 0:
-                        journeys = proc.run(l1lines)
-                elif client_name == 'UPF':
-                    journeys = process_ul_nlmt(raw_inputs)
-                
-                raw_inputs = []
-                
-                #update stats
-                for journey in journeys:
-                    try:
-                        journeys_queue.put_nowait(journey)
-                        stats_published_journeys = stats_published_journeys + 1
-                    except queue.Full:
-                        # update stats
-                        stats_dropped_journeys = stats_dropped_journeys + 1
+                if client_name == 'UE':
 
-                journeys = []
+                    l1lines = rdts.return_rdtsctots(raw_inputs)
+                    raw_inputs = []  
+                    l1lines.reverse()
+                    if len(l1lines) > 0:
+                        ue_ip_packets_df, ue_rlc_segments_df, ue_mac_attempts_df, _, _, _, _, _ = proc.run(l1lines)
+                        for index, row in ue_ip_packets_df.iterrows():
+                            try:
+                                ue_ip_packets_queue.put_nowait(row)
+                                stats_published_ue_ip_packets += 1
+                            except queue.Full:
+                                # update stats
+                                stats_dropped_ue_ip_packets += 1
+
+                        for index, row in ue_rlc_segments_df.iterrows():
+                            try:
+                                ue_rlc_segments_queue.put_nowait(row)
+                                stats_published_ue_rlc_segments += 1
+                            except queue.Full:
+                                # update stats
+                                stats_dropped_ue_rlc_segments += 1
+
+                        for index, row in ue_mac_attempts_df.iterrows():
+                            try:
+                                ue_mac_attempts_queue.put_nowait(row)
+                                stats_published_ue_mac_attempts += 1
+                            except queue.Full:
+                                # update stats
+                                stats_dropped_ue_mac_attempts += 1
+
+                        ue_ip_packets_df, ue_rlc_segments_df, ue_mac_attempts_df = [], [], []
+                        
+                elif client_name == 'GNB':
+
+                    l1lines = rdts.return_rdtsctots(raw_inputs)
+                    raw_inputs = []  
+                    if len(l1lines) > 0:
+                        gnb_ip_packets_df, gnb_rlc_segments_df, _, _, _, gnb_mac_attempts_df, gnb_mcs_reports_df = proc.run(l1lines)
+
+                        for index, row in gnb_ip_packets_df.iterrows():
+                            try:
+                                gnb_ip_packets_queue.put_nowait(row)
+                                stats_published_gnb_ip_packets += 1
+                            except queue.Full:
+                                # update stats
+                                stats_dropped_gnb_ip_packets += 1
+
+                        for index, row in gnb_rlc_segments_df.iterrows():
+                            try:
+                                gnb_rlc_segments_queue.put_nowait(row)
+                                stats_published_gnb_rlc_segments += 1
+                            except queue.Full:
+                                # update stats
+                                stats_dropped_gnb_rlc_segments += 1
+
+                        for index, row in gnb_mac_attempts_df.iterrows():
+                            try:
+                                gnb_mac_attempts_queue.put_nowait(row)
+                                stats_published_gnb_mac_attempts += 1
+                            except queue.Full:
+                                # update stats
+                                stats_dropped_gnb_mac_attempts += 1
+
+                        for index, row in gnb_mcs_reports_df.iterrows():
+                            try:
+                                gnb_mcs_reports_queue.put_nowait(row)
+                                stats_published_gnb_mcs_reports += 1
+                            except queue.Full:
+                                # update stats
+                                stats_dropped_gnb_mcs_reports += 1
+                        
+                        gnb_ip_packets_df, gnb_rlc_segments_df, gnb_mac_attempts_df, gnb_mcs_reports_df = [], [], [], []
+
+                elif client_name == 'UPF':
+                    upf_journeys = process_ul_nlmt(raw_inputs)
+                    raw_inputs = []            
+                    #update stats
+                    for upf_journey in upf_journeys:
+                        try:
+                            upf_journeys_queue.put_nowait(upf_journey)
+                            stats_published_upf_journeys = stats_published_upf_journeys + 1
+                        except queue.Full:
+                            # update stats
+                            stats_dropped_upf_journeys = stats_dropped_upf_journeys + 1
+                    upf_journeys = []
 
             # print stats
             current_time = time.time()
             elapsed_time = current_time - start_time
             if int(elapsed_time) >= LOGGING_PERIOD_SEC:
-                logger.info(f"[{client_name} queue process] received lines: {stats_rcv_lines}, dropped lines: {stats_dropped_lines}, published journeys: {stats_published_journeys}, dropped journeys: {stats_dropped_journeys}")
-                start_time = current_time
+                if client_name == 'UE':
+                    logger.info(f"[{client_name} queue process] received lines: {stats_rcv_lines}, dropped lines: {stats_dropped_lines}, published ue_ip_packets: {stats_published_ue_ip_packets}, dropped ue_ip_packets: {stats_dropped_ue_ip_packets}")
+                    start_time = current_time
+                elif client_name == 'GNB':
+                    logger.info(f"[{client_name} queue process] received lines: {stats_rcv_lines}, dropped lines: {stats_dropped_lines}, published gnb_ip_packets: {stats_published_gnb_ip_packets}, dropped gnb_ip_packets: {stats_dropped_gnb_ip_packets}")
+                    start_time = current_time
+                elif client_name == 'UPF':
+                    logger.info(f"[{client_name} queue process] received lines: {stats_rcv_lines}, dropped lines: {stats_dropped_lines}, published UPF journeys: {stats_published_upf_journeys}, dropped UPF journeys: {stats_dropped_upf_journeys}")
+                    start_time = current_time
 
         except Exception as ex:
             logger.error(f"[{client_name} queue process] {ex}")
             logger.warning(traceback.format_exc())
             # update stats, clean the queues
             stats_dropped_lines = stats_dropped_lines + len(raw_inputs)
-            stats_dropped_journeys = stats_dropped_journeys + len(journeys)
             raw_inputs = []
-            journeys = []
+            ue_ip_packets_df, ue_rlc_segments_df, ue_mac_attempts_df = [], [], []
+            gnb_ip_packets_df, gnb_rlc_segments_df, gnb_mac_attempts_df, gnb_mcs_reports_df = [], [], [], []
+            upf_journeys = []
 
 
 async def handle_client(reader, writer, client_name, config, rawdata_queue):
@@ -395,25 +492,25 @@ def serve():
         }
 
         gnb_rawdata_queue = Queue(MAX_L1_GNB_DEPTH)
-        gnb_journeys_queue = Queue(MAX_L2_GNB_DEPTH)
         ue_rawdata_queue = Queue(MAX_L1_UE_DEPTH)
-        ue_journeys_queue = Queue(MAX_L2_UE_DEPTH)
+        gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue = Queue(MAX_L2_GNB_DEPTH), Queue(MAX_L2_GNB_DEPTH), Queue(MAX_L2_GNB_DEPTH), Queue(MAX_L2_GNB_DEPTH)
+        ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue = Queue(MAX_L2_UE_DEPTH), Queue(MAX_L2_UE_DEPTH), Queue(MAX_L2_UE_DEPTH)
 
     try:
         # UPF
         upf_server = Process(target=net_server, args=("UPF", config, upf_rawdata_queue),daemon=True)
-        upf_qprocess = Process(target=queue_process, args=("UPF", config, upf_rawdata_queue, upf_journeys_queue),daemon=True)
+        upf_qprocess = Process(target=queue_process, args=("UPF", config, None, None, None, None, None, None, upf_rawdata_queue, upf_journeys_queue),daemon=True)
 
         # GNB
         gnb_server = Process(target=net_server, args=("GNB", config, gnb_rawdata_queue),daemon=True)
-        gnb_qprocess = Process(target=queue_process, args=("GNB", config, gnb_rawdata_queue, gnb_journeys_queue),daemon=True)
+        gnb_qprocess = Process(target=queue_process, args=("GNB", config, gnb_rawdata_queue, None, None, None, gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue, None),daemon=True)
 
         # UE
         ue_server = Process(target=net_server, args=("UE", config, ue_rawdata_queue),daemon=True)
-        ue_qprocess = Process(target=queue_process, args=("UE", config, ue_rawdata_queue, ue_journeys_queue),daemon=True)
+        ue_qprocess = Process(target=queue_process, args=("UE", config, ue_rawdata_queue, ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue, None, None, None, None, None),daemon=True)
 
         # COMBINE
-        combine_process = Process(target=combine_journeys, args=(upf_journeys_queue, gnb_journeys_queue, ue_journeys_queue, config), daemon=True)
+        combine_process = Process(target=combine_journeys, args=(upf_journeys_queue, gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue, ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue, config), daemon=True)
         
         # start
         upf_server.start()
