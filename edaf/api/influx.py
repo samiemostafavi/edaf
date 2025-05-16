@@ -2,55 +2,84 @@ import pandas as pd
 from influxdb_client import InfluxDBClient, Point, WritePrecision
 from influxdb_client.client.write_api import SYNCHRONOUS
 from datetime import datetime
+import math
+import re
+
+def is_duration_string(value):
+    if not isinstance(value, str):
+        return False
+
+    # Normalize microseconds symbol to 'us'
+    value = value.replace("µs", "us")
+
+    return re.match(r"^\s*[\d\.]+\s*(ns|us|ms|s|m|h)\s*$", value.strip()) is not None
+
+def convert_to_ms(value):
+    """
+    Convert a duration string (e.g. '21.45ms', '3us') to float milliseconds.
+    """
+    if pd.isna(value):
+        return None  # treat missing as None
+
+    if isinstance(value, (int, float)):
+        return float(value)  # assume already in ms
+
+    if isinstance(value, str):
+        value = value.replace("µs", "us")
+
+        # Match value like '21.45ms', '3us', etc.
+        match = re.match(r"([\d\.]+)\s*(ns|us|ms|s|m|h)", value.strip())
+        if not match:
+            raise ValueError(f"Invalid duration format: {value}")
+
+        number, unit = match.groups()
+        number = float(number)
+
+        unit_multipliers = {
+            "ns": 1e-6,
+            "us": 1e-3,
+            "ms": 1,
+            "s": 1e3,
+            "m": 60_000,
+            "h": 3_600_000,
+        }
+
+        return number * unit_multipliers[unit]
+
+    raise ValueError(f"Unsupported value type: {type(value)}")
 
 class InfluxClient:
-    def __init__(self, influx_db_address, token, bucket, org, point_name, fields = None, time_key = "send.timestamp"):
-        self.point_name = point_name
+    def __init__(self, influx_db_address, token, bucket, org):
         self.bucket = bucket
         self.org = org
-        self.time_key = time_key
-        self.fields = fields
         self.influx_db_address = influx_db_address
         self.token = token
         self.client = InfluxDBClient(url=influx_db_address, token=token)
         self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
 
-    def push_dataframe(self, df):
+    def push_dataframe(self, df, point_name, time_key):
         for index, row in df.iterrows():
-            point = Point(self.point_name)
-            if self.fields:
-                for f in fields:
-                    point.field(f, row[f])
-            else:
-                for f in df.keys():
-                    point.field(f, row[f])
 
-            point.time(datetime.fromtimestamp(row[self.time_key]), WritePrecision.NS)
-            #point.time(datetime.utcnow(), WritePrecision.NS)
-
-            #point = Point("e2e_delay").field("value", row['e2e_delay']).time(datetime.utcnow(), WritePrecision.NS)
-            self.write_api.write(self.bucket, self.org, point)
-
-    def __del__(self):
-        self.client.close()
-
-class InfluxClientFULL:
-    def __init__(self, influx_db_address, token, bucket, org, point_name, fields, time_key = "send.timestamp"):
-        self.bucket = bucket
-        self.org = org
-        self.time_key = time_key
-        self.fields = fields
-        self.influx_db_address = influx_db_address
-        self.token = token
-        self.client = InfluxDBClient(url=influx_db_address, token=token)
-        self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
-
-    def push_dataframe(self, df):
-        for index, row in df.iterrows():
+            point = Point(point_name)
             for col in df.columns:
-                if col in self.fields:
-                    point = Point(col).field("value", row[col]).time(int(float(row[self.time_key]) * 1e9), WritePrecision.NS)
-                    self.write_api.write(self.bucket, self.org, point)
+                if col == time_key:
+                    continue
+                value = row[col]
+                # Skip None, NaNs, nans
+                if pd.isnull(value) or pd.isna(value) or (isinstance(value, float) and math.isnan(value)):
+                    continue
+
+                if ('buf' in col.lower()) or ('rnti' in col.lower()) or ( col.lower() == "source" ):
+                    point = point.field(col, str(value))
+                else:
+                    if is_duration_string(value):
+                        # This is a duration, convert to ms float
+                        value = convert_to_ms(value)
+
+                    point = point.field(col, float(value))
+
+            point = point.time(int(float(row[time_key]) * 1e9), WritePrecision.NS)
+            self.write_api.write(self.bucket, self.org, point)
 
     def __del__(self):
         self.client.close()

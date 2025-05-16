@@ -204,8 +204,11 @@ def find_rlc_reports(lines):
                 if num_value not in rlc_reports:
                     rlc_reports[num_value] = {}
                 rlc_reports[num_value]['ack'] = rlc_ack_dict
-
-    logger.info(f"Extracted {max(rlc_reports.keys())} rlc reports.")
+    if rlc_reports:
+        logger.info(f"Extracted {max(rlc_reports.keys())} rlc reports.")
+    else:
+        return pd.DataFrame([])
+    
     # sort the reports
     rlc_reports = dict(sorted(rlc_reports.items()))
 

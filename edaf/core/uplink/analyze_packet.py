@@ -62,6 +62,33 @@ class ULPacketAnalyzer:
         # check and report the ue_ip_ids and gnb sns
         logger.success(f"Imported database '{db_addr}', with UE IDs ranging from {self.ue_ip_packets_df['ip_id'].min()} to {self.ue_ip_packets_df['ip_id'].max()}, and GNB SNs ranging from {self.gnb_ip_packets_df['gtp.out.sn'].min()} to {self.gnb_ip_packets_df['gtp.out.sn'].max()}")
 
+    def __init__(self, nlmt_df, gnb_ip_packets_df, gnb_rlc_segments_df, gnb_iprlc_rel_df, gnb_mac_attempts_df, gnb_mcs_reports_df, ue_ip_packets_df, ue_rlc_segments_df, ue_mac_attempts_df, ue_iprlc_rel_df):
+        self.nlmt_df = nlmt_df
+        self.gnb_ip_packets_df = gnb_ip_packets_df
+        self.gnb_rlc_segments_df = gnb_rlc_segments_df
+        self.gnb_iprlc_rel_df = gnb_iprlc_rel_df
+        self.gnb_mac_attempts_df = gnb_mac_attempts_df
+        self.gnb_mcs_reports_df = gnb_mcs_reports_df
+        self.gnb_mcs_reports_df = gnb_mcs_reports_df
+        self.ue_ip_packets_df = ue_ip_packets_df
+        self.ue_rlc_segments_df = ue_rlc_segments_df
+        self.ue_mac_attempts_df = ue_mac_attempts_df
+        self.ue_iprlc_rel_df = ue_iprlc_rel_df
+
+        # check and report the first and last ue ip ids
+        self.first_ueipid = self.ue_ip_packets_df['ip_id'].min()
+        self.last_ueipid = self.ue_ip_packets_df['ip_id'].max()
+        # check and report the first and last gnb sns
+        self.first_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].min()
+        self.last_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].max()
+        # check and report the first and last timestamps
+        self.first_ueip_ts = self.ue_ip_packets_df['ip.in.timestamp'].min()
+        self.last_ueip_ts = self.ue_ip_packets_df['ip.in.timestamp'].max()
+
+        # check and report the ue_ip_ids and gnb sns
+        logger.debug(f"Imported online data, with UE IDs ranging from {self.ue_ip_packets_df['ip_id'].min()} to {self.ue_ip_packets_df['ip_id'].max()}, and GNB SNs ranging from {self.gnb_ip_packets_df['gtp.out.sn'].min()} to {self.gnb_ip_packets_df['gtp.out.sn'].max()}")
+
+
     def figure_packet_arrivals_from_ts(self, ts_begin, ts_end):
 
         ueippackets = self.ue_ip_packets_df[

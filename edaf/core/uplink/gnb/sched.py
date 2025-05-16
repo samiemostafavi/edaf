@@ -98,6 +98,7 @@ def find_sched_events(previous_lines : RingBuffer, lines):
                 }
             logger.debug(f"[GNB] Found '{SCHED_UE_STR}' in line {line_number}, {sched_report[SCHED_UE_STR]}")
 
+            found_SCHED_CAUSE = False
             if not is_retx:
                 # lets go back in lines
                 prev_lines = previous_lines.reverse_items()
@@ -107,7 +108,6 @@ def find_sched_events(previous_lines : RingBuffer, lines):
                 # sched.cause--sched.ue rntif58e.type2.fm124.sl1.fmtx124.sltx7.hqpid0
                 # sched.cause--sched.ue rntif58e.type3.fm148.sl2.fmtx148.sltx8.diff200.hqpid0
                 # This will give us 3 types of causes that we discover later
-                found_SCHED_CAUSE = False
                 for jd,prev_ljne in enumerate(prev_lines):
                     if (SCHED_CAUSE_STR in prev_ljne) and (f'fmtx{fmtx_value}' in prev_ljne) and (f'sltx{sltx_value}' in prev_ljne) and (f'rnti{rnti_value}' in prev_ljne):
                         property_loss = False

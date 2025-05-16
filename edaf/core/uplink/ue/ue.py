@@ -25,7 +25,21 @@ PRIOR_LINES_NUM = 50
 #    return float(line.split()[0])
 
 class ProcessULUE:
-    def __init__(self):
+    def __init__(
+            self,
+            enable_ip_packets = True,
+            enable_rlc_segments = True,
+            enable_mac_attempts = True,
+            enable_uldcis_reports = True,
+            enable_sched_reports = True
+        ):
+
+        self.enable_ip_packets = enable_ip_packets
+        self.enable_rlc_segments = enable_rlc_segments
+        self.enable_mac_attempts = enable_mac_attempts
+        self.enable_uldcis_reports = enable_uldcis_reports
+        self.enable_sched_reports = enable_sched_reports
+
         self.previous_lines_ip = RingBuffer(PREV_LINES_MAX)
         self.ip_id_count = 0
         self.previous_lines_rlc = RingBuffer(PREV_LINES_MAX)
@@ -34,10 +48,30 @@ class ProcessULUE:
         self.mac_id_count = 0
         
     def run(self, lines):
-        ip_packets_df = find_ip_packets(self.previous_lines_ip, lines, self.ip_id_count)
-        rlc_segments_df = find_rlc_segments(self.previous_lines_rlc, lines, self.txpdu_id_count)
-        mac_attempts_df = find_mac_attempts(self.previous_lines_mac, lines, self.mac_id_count)
-        uldcis_df = find_uldci_reports(lines)
-        bsrupds_df, bsrtxs_df, srtrigs_df, srtxs_df = find_sched_reports(lines)
+        if self.enable_ip_packets:
+            ip_packets_df = find_ip_packets(self.previous_lines_ip, lines, self.ip_id_count)
+        else:
+            ip_packets_df = None
+        
+        if self.enable_rlc_segments:
+            rlc_segments_df = find_rlc_segments(self.previous_lines_rlc, lines, self.txpdu_id_count)
+        else:
+            rlc_segments_df = None
+        
+        if self.enable_mac_attempts:
+            mac_attempts_df = find_mac_attempts(self.previous_lines_mac, lines, self.mac_id_count)
+        else:
+            mac_attempts_df = None
+
+        if self.enable_uldcis_reports:
+            uldcis_df = find_uldci_reports(lines)
+        else:
+            uldcis_df = None
+        
+        if self.enable_sched_reports:
+            bsrupds_df, bsrtxs_df, srtrigs_df, srtxs_df = find_sched_reports(lines)
+        else:
+            bsrupds_df, bsrtxs_df, srtrigs_df, srtxs_df = None, None, None, None
+            
         return ip_packets_df, rlc_segments_df, mac_attempts_df, uldcis_df, bsrupds_df, bsrtxs_df, srtrigs_df, srtxs_df
 
