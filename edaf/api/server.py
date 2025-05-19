@@ -27,11 +27,14 @@ JOURNEYS_THRESHOLD_UE = 20
 
 LOGGING_PERIOD_SEC = 2
 
-PACKET_ANALYZE_SLEEP_S = 1 # while loop sleep duration in seconds
+PACKETS_DECOMPOSE_WINDOW_S = 5 # history window duration in seconds
+PACKETS_DECOMPOSE_SLEEP_S = 1 # while loop sleep duration in seconds
+PROCESS_RAW_SLEEP_S = 1 # while loop sleep duration in seconds
 MIN_NUM_PACKETS_TO_ANALYZE = 200
 
 org = "expeca"
-bucket = "edaf_raw"
+raw_bucket = "edaf_raw"
+main_bucket = "edaf_main"
 influx_db_address = "http://0.0.0.0:8086"
 auth_info_addr = "/EDAF/influx_auth.json"
 
@@ -43,7 +46,338 @@ def pop_q_items(items_queue : multiprocessing.Queue):
     return items
 
 
-def analyze_and_publish(upf_journeys_queue, gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue, ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue, config):
+def decompose_packet_delays(flat_packet, complete_packet):
+    delays = {
+        "e2e_delay": None,
+        "queuing_delay": None,
+        "link_delay": None,
+        "segmentation_delay": None,
+        "transmission_delay": None,
+        "retransmission_delay": None
+    }
+
+    # End-to-end delay
+    try:
+        delays["e2e_delay"] = (flat_packet["ip.out_t"] - flat_packet["ip.in_t"])*1000
+    except:
+        return delays  # Cannot calculate anything without E2E
+
+    # get RLC attempts
+    rlc_attempts = complete_packet.get("rlc.attempts", [])
+    if not rlc_attempts:
+        return delays
+
+    # Segmentation delay
+    try:
+        rlcN = rlc_attempts[-1]
+        delays["segmentation_delay"] = (rlcN['mac.out_t'] - rlc0['mac.out_t'])*1000
+    except:
+        pass
+
+    rlc0 = complete_packet["rlc.attempts"][0]
+    rlc0_mac_attempts = rlc0.get("mac.attempts",[])
+    if not rlc0_mac_attempts:
+        return delays
+    
+    # Queuing delay
+    try:
+        delays["queuing_delay"] = (rlc0_mac_attempts[0]['phy.in_t'] - flat_packet["ip.in_t"])*1000
+    except:
+        pass
+
+    # Link delay
+    try:
+        delays["link_delay"] =  (flat_packet['ip.out_t'] - rlc0_mac_attempts[0]['phy.in_t'])*1000
+    except:
+        pass
+
+    # transmission delay
+    try:
+        delays["transmission_delay"] = (rlc0_mac_attempts[0]["phy.out_t"] - rlc0_mac_attempts[0]['phy.in_t'])*1000
+    except:
+        pass
+
+    rlc_max = max(rlc_attempts, key=lambda r: len(r.get("mac.attempts", [])))
+    rlc_max_mac_attempts = rlc_max.get("mac.attempts", [])
+    if not rlc_max_mac_attempts:
+        return delays
+
+    # MAC retransmission delay
+    try:
+        if flat_packet['mac.num_total_retx'] > 0:
+            delays["mac_retransmission_delay"] = (rlc_max_mac_attempts[-1]["phy.out_t"] - rlc_max_mac_attempts[0]["phy.decode_t"])*1000
+        else:
+            delays["mac_retransmission_delay"] = 0.0
+    except:
+        pass
+
+    return delays
+
+
+def flatten_decomposed_packets(decomposed_packets_list: list):
+    flat_packets = []
+
+    for dec_packet in decomposed_packets_list:
+        rlc_attempts = dec_packet.get('rlc.attempts')
+
+        if not rlc_attempts:
+            # If rlc_attempts is None or empty, set all dependent metrics to None
+            res_flat_packet = {
+                'sn': dec_packet.get('sn'),
+                'ip.len': dec_packet.get('ip.len'),
+                'ip.in_t': dec_packet.get('ip.in_t'),
+                'ip.out_t': dec_packet.get('ip.out_t'),
+                'rlc.in_t': dec_packet.get('rlc.in_t'),
+                'rlc.out_t': dec_packet.get('rlc.out_t'),
+                'backlog': dec_packet.get('backlog'),
+                'rlc.total_num_attempts': None,
+                'rlc.num_repeated_attempts': None,
+                'mac.num_total_retx': None,
+                'mac.num_max_retx': None,
+                'mac.num_total_rbs': None,
+                'mac.num_max_rbs': None,
+                'mac.num_total_syms': None,
+                'mac.num_max_syms': None
+            }
+            continue
+
+        # Filter out any None entries in rlc_attempts
+        rlc_attempts = [a for a in rlc_attempts if a]
+
+        rlc_total_num_attempts = len(rlc_attempts)
+        rlc_num_repeated_attempts = sum(int(a.get('repeated', 0)) for a in rlc_attempts)
+
+        mac_retx_counts = []
+        mac_rbs_values = []
+        mac_syms_values = []
+
+        for rlc_attempt in rlc_attempts:
+            mac_attempts = rlc_attempt.get('mac.attempts')
+
+            if not mac_attempts:
+                mac_retx_counts.append(None)
+                mac_rbs_values.append(None)
+                mac_syms_values.append(None)
+                continue
+
+            mac_attempts = [m for m in mac_attempts if m]  # filter out None
+
+            if not mac_attempts:
+                mac_retx_counts.append(None)
+                mac_rbs_values.append(None)
+                mac_syms_values.append(None)
+                continue
+
+            mac_retx_counts.append(len(mac_attempts) - 1)
+            mac_rbs_values.append(int(mac_attempts[0].get('rbs', 0)))
+            mac_syms_values.append(int(mac_attempts[0].get('symbols', 0)))
+
+        def safe_sum(values):
+            if any(v is None for v in values):
+                return None
+            return sum(values)
+
+        def safe_max(values):
+            if any(v is None for v in values):
+                return None
+            return max(values)
+
+        res_flat_packet = {
+            'sn': dec_packet.get('sn'),
+            'ip.len': dec_packet.get('ip.len'),
+            'ip.in_t': dec_packet.get('ip.in_t'),
+            'ip.out_t': dec_packet.get('ip.out_t'),
+            'rlc.in_t': dec_packet.get('rlc.in_t'),
+            'rlc.out_t': dec_packet.get('rlc.out_t'),
+            'backlog': dec_packet.get('backlog'),
+            'rlc.total_num_attempts': rlc_total_num_attempts,
+            'rlc.num_repeated_attempts': rlc_num_repeated_attempts,
+            'mac.num_total_retx': safe_sum(mac_retx_counts),
+            'mac.num_max_retx': safe_max(mac_retx_counts),
+            'mac.num_total_rbs': safe_sum(mac_rbs_values),
+            'mac.num_max_rbs': safe_max(mac_rbs_values),
+            'mac.num_total_syms': safe_sum(mac_syms_values),
+            'mac.num_max_syms': safe_max(mac_syms_values)
+        }
+
+        delays = decompose_packet_delays(res_flat_packet, dec_packet)
+        res_flat_packet = {
+            **res_flat_packet,
+            **delays
+        }
+        flat_packets.append(res_flat_packet)
+
+    return flat_packets
+
+
+def packets_decompose(config):
+    # stats counters initialize
+    stats_rcv_upf, stats_rcv_gnb_ip, stats_rcv_gnb_rlc, stats_rcv_gnb_mac, stats_rcv_gnb_mcs, stats_rcv_ue_ip, stats_rcv_ue_rlc, stats_rcv_ue_mac, stats_published_packets, stats_decomposed_packets = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    
+    start_time = time.time()
+
+    if config["influx_token"]:
+        influx_cli = InfluxClient(influx_db_address, config["influx_token"], org)
+        influx_cli.create_bucket(main_bucket)
+        logger.success("[packets_decompose] influxDB client initialized")
+    else:
+        influx_cli = None
+        logger.error("[packets_decompose] influxDB client NONE")
+
+    logger.success(f"[packets_decompose] process starts.")
+
+
+    while True:
+        
+        time.sleep(PACKETS_DECOMPOSE_SLEEP_S)
+
+        # print stats
+        current_time = time.time()
+        elapsed_time = current_time - start_time
+        if int(elapsed_time) >= LOGGING_PERIOD_SEC:
+            logger.info(f"[packets_decompose]  downloaded items: UPF {stats_rcv_upf}, GNB.ip {stats_rcv_gnb_ip}, GNB.rlc {stats_rcv_gnb_rlc}, GNB.mac {stats_rcv_gnb_mac}, GNB.mcs {stats_rcv_gnb_mcs}, UE.ip {stats_rcv_ue_ip}, UE.rlc {stats_rcv_ue_rlc}, UE.mac {stats_rcv_ue_mac}")
+            logger.info(f"[packets_decompose]  decomposed packets: {stats_decomposed_packets}, published packets: {stats_published_packets}")
+            start_time = current_time
+        try: 
+            # run the decomposition and analysis
+            upf_items_df, gnb_ip_items_df, gnb_rlc_items_df, gnb_mac_items_df, gnb_mcs_items_df, ue_ip_items_df, ue_rlc_items_df, ue_mac_items_df = None, None, None, None, None, None, None, None
+
+            # fetch all the data from the last few seconds
+            recent_data = influx_cli.fetch_recent_data(raw_bucket, PACKETS_DECOMPOSE_WINDOW_S)
+            for item in recent_data:
+                # item is a dict with "df", "point_name", and "time_key"
+                # let's recreate the dataframes:
+                if item["point_name"] == "upf":
+                    if len(item["df"]) > 0:
+                        upf_items_df = item["df"]
+                        stats_rcv_upf += len(item["df"])
+                if item["point_name"] == "gnb_ip":
+                    if len(item["df"]) > 0:
+                        gnb_ip_items_df = item["df"]
+                        stats_rcv_gnb_ip += len(item["df"])
+                if item["point_name"] == "gnb_rlc":
+                    if len(item["df"]) > 0:
+                        gnb_rlc_items_df = item["df"]
+                        stats_rcv_gnb_rlc += len(item["df"])
+                if item["point_name"] == "gnb_mac":
+                    if len(item["df"]) > 0:
+                        gnb_mac_items_df = item["df"]
+                        stats_rcv_gnb_mac += len(item["df"])
+                if item["point_name"] == "gnb_mcs":
+                    if len(item["df"]) > 0:
+                        gnb_mcs_items_df = item["df"]
+                        stats_rcv_gnb_mcs += len(item["df"])
+                if item["point_name"] == "ue_ip":
+                    if len(item["df"]) > 0:
+                        ue_ip_items_df = item["df"]
+                        stats_rcv_ue_ip += len(item["df"])
+                if item["point_name"] == "ue_rlc":
+                    if len(item["df"]) > 0:
+                        ue_rlc_items_df = item["df"]
+                        stats_rcv_ue_rlc += len(item["df"])
+                if item["point_name"] == "ue_mac":
+                    if len(item["df"]) > 0:
+                        ue_mac_items_df = item["df"]
+                        stats_rcv_ue_mac += len(item["df"])
+                
+            if all([
+                    upf_items_df is not None,
+                    gnb_ip_items_df is not None,
+                    gnb_rlc_items_df is not None,
+                    gnb_mac_items_df is not None,
+                    gnb_mcs_items_df is not None,
+                    ue_ip_items_df is not None,
+                    ue_rlc_items_df is not None,
+                    ue_mac_items_df is not None,
+                ]):
+
+                # Create gnb databases relationship
+                # For each 'gtp.out.sn' in gnb_ip_packets_df, find corresponding 'sdu_id' entries in gnb_rlc_segments_df
+                gnb_ip_items_df['gtp.out.sn'] = gnb_ip_items_df['gtp.out.sn'].astype(int)
+                gnb_rlc_items_df['rlc.reassembled.sn'] = gnb_rlc_items_df['rlc.reassembled.sn'].astype(int)
+                gnb_rlc_items_df['sdu_id'] = gnb_rlc_items_df['sdu_id'].astype(int)
+
+                gnb_iprlc_rel_df = pd.merge(gnb_ip_items_df[['gtp.out.sn']],
+                                        gnb_rlc_items_df[['rlc.reassembled.sn', 'sdu_id']],
+                                        left_on='gtp.out.sn', right_on='rlc.reassembled.sn')
+                gnb_iprlc_rel_df = gnb_iprlc_rel_df.drop(columns=['rlc.reassembled.sn'])
+                if len(gnb_iprlc_rel_df) == 0:
+                    logger.error(f"Finding gnb_iprlc_rel_df was unsuccessful")
+                    #print(gnb_iprlc_rel_df)
+                    continue
+
+                # For each pair of ['rlc.queue.R2buf', 'rlc.queue.sn'] in ue_ip_packets_df,
+                # find corresponding entries in ue_rlc_segments_df with the same values for ['rlc.txpdu.R2buf', 'rlc.txpdu.sn']
+                ue_ip_items_df["rlc.queue.sn"] = ue_ip_items_df["rlc.queue.sn"].astype(float)
+                ue_ip_items_df["rlc.queue.R2buf"] = ue_ip_items_df["rlc.queue.R2buf"].astype(float)
+                ue_rlc_items_df["rlc.txpdu.sn"] = ue_rlc_items_df["rlc.txpdu.sn"].astype(float)
+                ue_rlc_items_df["rlc.txpdu.R2buf"] = ue_rlc_items_df["rlc.txpdu.R2buf"].astype(float)
+                ue_ip_items_df["rlc.queue.sn"] = ue_ip_items_df["rlc.queue.sn"].astype(int)
+                ue_ip_items_df["rlc.queue.R2buf"] = ue_ip_items_df["rlc.queue.R2buf"].astype(int)
+                ue_rlc_items_df["rlc.txpdu.sn"] = ue_rlc_items_df["rlc.txpdu.sn"].astype(int)
+                ue_rlc_items_df["rlc.txpdu.R2buf"] = ue_rlc_items_df["rlc.txpdu.R2buf"].astype(int)
+                ue_iprlc_rel_df = pd.merge(ue_ip_items_df[['rlc.queue.R2buf', 'rlc.queue.sn',  'ip_id']],
+                                        ue_rlc_items_df[['rlc.txpdu.R2buf', 'rlc.txpdu.sn', 'rlc.txpdu.srn','rlc.txpdu.timestamp', 'rlc.txpdu.length', 'txpdu_id']],  # Additional columns from ue_rlc_segments_df
+                                        left_on=['rlc.queue.R2buf', 'rlc.queue.sn'],
+                                        right_on=['rlc.txpdu.R2buf', 'rlc.txpdu.sn'])
+                ue_iprlc_rel_df = ue_iprlc_rel_df.drop(columns=['rlc.queue.R2buf', 'rlc.queue.sn' , 'rlc.txpdu.R2buf', 'rlc.txpdu.sn', 'rlc.txpdu.timestamp', 'rlc.txpdu.length'])
+                ue_iprlc_rel_df["ip_id"] = ue_iprlc_rel_df["ip_id"].astype(int)
+                ue_ip_items_df["ip_id"] = ue_ip_items_df["ip_id"].astype(int)
+                ue_rlc_items_df['txpdu_id'] = ue_rlc_items_df['txpdu_id'].astype(int)
+                if len(ue_iprlc_rel_df) == 0:
+                    logger.error(f"Finding ue_iprlc_rel_df was unsuccessful")
+                    #print(ue_iprlc_rel_df)
+                    continue
+
+                packet_analyzer = ULPacketAnalyzer(upf_items_df, gnb_ip_items_df, gnb_rlc_items_df, gnb_iprlc_rel_df, gnb_mac_items_df, gnb_mcs_items_df, ue_ip_items_df, ue_rlc_items_df, ue_mac_items_df, ue_iprlc_rel_df)
+                ue_srns_arr = list(range(int(packet_analyzer.first_rlcsrn), int(packet_analyzer.last_rlcsrn)))
+                decomposed_packets_list = packet_analyzer.figure_packettx_from_ue_rlc_srn(ue_srns_arr, silent = True)
+                flat_decomposed_packets_list = flatten_decomposed_packets(decomposed_packets_list)
+                analyzed_packets_df = pd.DataFrame(flat_decomposed_packets_list)
+
+                print(analyzed_packets_df)
+
+                if analyzed_packets_df is not None:
+                    stats_decomposed_packets += len(analyzed_packets_df)
+                    if len(analyzed_packets_df)>0:
+                        # print(df)
+                        logger.debug(f"[combine journeys] Pushing {len(analyzed_packets_df)} packet records to the database")
+                        # push df to influxdb
+                        if influx_cli:
+                            influx_cli.push_dataframe_list(
+                                [
+                                    {
+                                        "df" : analyzed_packets_df,
+                                        "point_name" : "packet_decomposed",
+                                        "time_key" : "ip.in_t"
+                                    }
+                                ],
+                                main_bucket
+                            )
+                            stats_published_packets += len(analyzed_packets_df)
+                        else:
+                            logger.warning(f"[combine journeys] Failed to push {len(analyzed_packets_df)} packet records to the database as influx cli is not setup.")
+
+
+            else:
+                missing = []
+                if upf_items_df is None: missing.append("upf")
+                if gnb_ip_items_df is None: missing.append("gnb_ip")
+                if gnb_rlc_items_df is None: missing.append("gnb_rlc")
+                if gnb_mac_items_df is None: missing.append("gnb_mac")
+                if gnb_mcs_items_df is None: missing.append("gnb_mcs")
+                if ue_ip_items_df is None: missing.append("ue_ip")
+                if ue_rlc_items_df is None: missing.append("ue_rlc")
+                if ue_mac_items_df is None: missing.append("ue_mac")
+
+                logger.warning(f"[packets_decompose] For full decomposition, dataframes {missing} are not available.")
+
+        except Exception as ex:
+            logger.error(f"[packets_decompose] {ex}")
+            logger.warning(traceback.format_exc())
+
+
+def process_raw_lines(upf_journeys_queue, gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue, ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue, config):
     # stats counters initialize
     stats_rcv_upf, stats_rcv_gnb_ip, stats_rcv_gnb_rlc, stats_rcv_gnb_mac, stats_rcv_gnb_mcs, stats_rcv_ue_ip, stats_rcv_ue_rlc, stats_rcv_ue_mac = 0, 0, 0, 0, 0, 0, 0, 0
     stats_published_upf_items, stats_published_gnb_ip_items, stats_published_gnb_rlc_items, stats_gnb_mac_items, stats_gnb_mcs_items, stats_ue_ip_items, stats_ue_rlc_items, stats_ue_mac_items = 0, 0, 0, 0, 0, 0, 0, 0
@@ -51,24 +385,24 @@ def analyze_and_publish(upf_journeys_queue, gnb_ip_packets_queue, gnb_rlc_segmen
     start_time = time.time()
 
     if config["influx_token"]:
-        influx_cli = InfluxClient(influx_db_address, config["influx_token"], bucket, org)
-        logger.success("[combine journeys] influxDB client initialized")
+        influx_cli = InfluxClient(influx_db_address, config["influx_token"], org)
+        logger.success("[process_raw_lines] influxDB client initialized")
     else:
         influx_cli = None
-        logger.error("[combine journeys] influxDB client NONE")
+        logger.error("[process_raw_lines] influxDB client NONE")
 
-    logger.success(f"[combine journeys] process starts.")
+    logger.success(f"[process_raw_lines] process starts.")
     
     while True:
         
-        time.sleep(PACKET_ANALYZE_SLEEP_S)
+        time.sleep(PROCESS_RAW_SLEEP_S)
 
         # print stats
         current_time = time.time()
         elapsed_time = current_time - start_time
         if int(elapsed_time) >= LOGGING_PERIOD_SEC:
-            logger.info(f"[received data to publish] received entries: UPF {stats_rcv_upf}, GNB.ip {stats_rcv_gnb_ip}, GNB.rlc {stats_rcv_gnb_rlc}, GNB.mac {stats_rcv_gnb_mac}, GNB.mcs {stats_rcv_gnb_mcs}, UE.ip {stats_rcv_ue_ip}, UE.rlc {stats_rcv_ue_rlc}, UE.mac {stats_rcv_ue_mac}")
-            logger.info(f"[actually published data to influxdb] \t   UPF {stats_published_upf_items}, GNB.ip {stats_published_gnb_ip_items}, GNB.rlc {stats_published_gnb_rlc_items}, GNB.mac {stats_gnb_mac_items}, GNB.mcs {stats_gnb_mcs_items}, UE.ip {stats_ue_ip_items}, UE.rlc {stats_ue_rlc_items}, UE.mac {stats_ue_mac_items}")
+            logger.info(f"[process_raw_lines]  received entries: UPF {stats_rcv_upf}, GNB.ip {stats_rcv_gnb_ip}, GNB.rlc {stats_rcv_gnb_rlc}, GNB.mac {stats_rcv_gnb_mac}, GNB.mcs {stats_rcv_gnb_mcs}, UE.ip {stats_rcv_ue_ip}, UE.rlc {stats_rcv_ue_rlc}, UE.mac {stats_rcv_ue_mac}")
+            logger.info(f"[process_raw_lines] published entries: UPF {stats_published_upf_items}, GNB.ip {stats_published_gnb_ip_items}, GNB.rlc {stats_published_gnb_rlc_items}, GNB.mac {stats_gnb_mac_items}, GNB.mcs {stats_gnb_mcs_items}, UE.ip {stats_ue_ip_items}, UE.rlc {stats_ue_rlc_items}, UE.mac {stats_ue_mac_items}")
 
             start_time = current_time
     
@@ -105,21 +439,6 @@ def analyze_and_publish(upf_journeys_queue, gnb_ip_packets_queue, gnb_rlc_segmen
             ue_mac_items = pop_q_items(ue_mac_attempts_queue)
             stats_rcv_ue_mac += len(ue_mac_items)
             ue_mac_items_df = pd.DataFrame(ue_mac_items)  
-
-            # Create gnb databases relationship
-            # For each 'gtp.out.sn' in gnb_ip_packets_df, find corresponding 'sdu_id' entries in gnb_rlc_segments_df
-            #gnb_iprlc_rel_df = pd.merge(gnb_ip_items_df[['gtp.out.sn']],
-            #                        gnb_rlc_items_df[['rlc.reassembled.sn', 'sdu_id']],
-            #                        left_on='gtp.out.sn', right_on='rlc.reassembled.sn')
-            #gnb_iprlc_rel_df = gnb_iprlc_rel_df.drop(columns=['rlc.reassembled.sn'])
-
-            # For each pair of ['rlc.queue.R2buf', 'rlc.queue.sn'] in ue_ip_packets_df,
-            # find corresponding entries in ue_rlc_segments_df with the same values for ['rlc.txpdu.R2buf', 'rlc.txpdu.sn']
-            #ue_iprlc_rel_df = pd.merge(ue_ip_items_df[['rlc.queue.R2buf', 'rlc.queue.sn',  'ip_id']],
-            #                        ue_rlc_items_df[['rlc.txpdu.R2buf', 'rlc.txpdu.sn', 'rlc.txpdu.srn','rlc.txpdu.timestamp', 'rlc.txpdu.length', 'txpdu_id']],  # Additional columns from ue_rlc_segments_df
-            #                        left_on=['rlc.queue.R2buf', 'rlc.queue.sn'],
-            #                        right_on=['rlc.txpdu.R2buf', 'rlc.txpdu.sn'])
-            #ue_iprlc_rel_df = ue_iprlc_rel_df.drop(columns=['rlc.queue.R2buf', 'rlc.queue.sn' , 'rlc.txpdu.R2buf', 'rlc.txpdu.sn', 'rlc.txpdu.timestamp', 'rlc.txpdu.length'])
 
             if influx_cli:
 
@@ -186,29 +505,13 @@ def analyze_and_publish(upf_journeys_queue, gnb_ip_packets_queue, gnb_rlc_segmen
                     stats_ue_mac_items += len(ue_mac_items_df)
 
                 if publish_list:
-                    influx_cli.push_dataframe_list(publish_list)
+                    influx_cli.push_dataframe_list(publish_list, raw_bucket)
                 
             else:
-                logger.warning(f"[combine journeys] Failed to push {len(upf_items_df)} upf records to the database as influx cli is not setup.")
+                logger.warning(f"[process_raw_lines] Failed to push {len(upf_items_df)} upf records to the database as influx cli is not setup.")            
 
-                #packet_analyzer = ULPacketAnalyzer(upf_items_df, gnb_ip_items_df, gnb_rlc_items_df, gnb_iprlc_rel_df, gnb_mac_items_df, gnb_mcs_items_df, ue_ip_items_df, ue_rlc_items_df, ue_mac_items_df, ue_iprlc_rel_df)
-                #uids_arr = list(range(int(packet_analyzer.first_ueipid), int(packet_analyzer.last_ueipid)))
-                #analyzed_packets_list = packet_analyzer.figure_packettx_from_ueipids(uids_arr)
-                #analyzed_packets_df = pd.DataFrame(analyzed_packets_list)
-            
-
-            #if analyzed_packets_df is not None:
-            #    if len(analyzed_packets_df)>0:
-                    # print(df)
-            #        logger.debug(f"[combine journeys] Pushing {len(analyzed_packets_df)} packet records to the database")
-                    # push df to influxdb
-            #        if influx_cli:
-            #            influx_cli.push_dataframe(analyzed_packets_df)
-            #            stats_published_packets += len(analyzed_packets_df)
-            #        else:
-            #            logger.warning(f"[combine journeys] Failed to push {len(analyzed_packets_df)} packet records to the database as influx cli is not setup.")
         except Exception as ex:
-            logger.error(f"[analyze packets] {ex}")
+            logger.error(f"[process_raw_lines] {ex}")
             logger.warning(traceback.format_exc())
 
 
@@ -537,8 +840,10 @@ def serve():
         ue_qprocess = Process(target=queue_process, args=("UE", config, ue_rawdata_queue, ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue, None, None, None, None, None),daemon=True)
 
         # COMBINE
-        combine_process = Process(target=analyze_and_publish, args=(upf_journeys_queue, gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue, ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue, config), daemon=True)
+        raw_process = Process(target=process_raw_lines, args=(upf_journeys_queue, gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue, ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue, config), daemon=True)
+        decompose_process = Process(target=packets_decompose, args=(config,), daemon=True)
         
+
         # start
         upf_server.start()
         upf_qprocess.start()
@@ -549,7 +854,8 @@ def serve():
         ue_server.start()
         ue_qprocess.start()
 
-        combine_process.start()
+        raw_process.start()
+        decompose_process.start()
 
         # join
         upf_server.join()
@@ -561,7 +867,8 @@ def serve():
         ue_server.join()
         ue_qprocess.join()
 
-        combine_process.join()
+        raw_process.join()
+        decompose_process.join()
 
     except KeyboardInterrupt:
         logger.warning("Caught KeyboardInterrupt, terminating workers")
@@ -576,7 +883,8 @@ def serve():
         ue_server.terminate()
         ue_qprocess.terminate()
         
-        combine_process.terminate()
+        raw_process.terminate()
+        decompose_process.terminate()
     else:
         logger.warning("Termination")
 
@@ -590,4 +898,5 @@ def serve():
         ue_server.terminate()
         ue_qprocess.terminate()
 
-        combine_process.terminate()
+        raw_process.terminate()
+        decompose_process.terminate()

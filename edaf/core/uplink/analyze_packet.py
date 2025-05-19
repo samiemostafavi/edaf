@@ -51,6 +51,11 @@ class ULPacketAnalyzer:
         # check and report the first and last ue ip ids
         self.first_ueipid = self.ue_ip_packets_df['ip_id'].min()
         self.last_ueipid = self.ue_ip_packets_df['ip_id'].max()
+
+        # check and report the first and last rlc.txpdu.srn
+        self.first_rlcsrn = self.ue_rlc_segments_df["rlc.txpdu.srn"].min()
+        self.last_rlcsrn = self.ue_rlc_segments_df["rlc.txpdu.srn"].max()
+
         # check and report the first and last gnb sns
         self.first_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].min()
         self.last_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].max()
@@ -78,9 +83,15 @@ class ULPacketAnalyzer:
         # check and report the first and last ue ip ids
         self.first_ueipid = self.ue_ip_packets_df['ip_id'].min()
         self.last_ueipid = self.ue_ip_packets_df['ip_id'].max()
+
+        # check and report the first and last rlc.txpdu.srn
+        self.first_rlcsrn = self.ue_rlc_segments_df["rlc.txpdu.srn"].min()
+        self.last_rlcsrn = self.ue_rlc_segments_df["rlc.txpdu.srn"].max()
+
         # check and report the first and last gnb sns
         self.first_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].min()
         self.last_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].max()
+
         # check and report the first and last timestamps
         self.first_ueip_ts = self.ue_ip_packets_df['ip.in.timestamp'].min()
         self.last_ueip_ts = self.ue_ip_packets_df['ip.in.timestamp'].max()
@@ -111,7 +122,85 @@ class ULPacketAnalyzer:
 
         return self.figure_packettx_from_ueipids(ue_ipid_list)
 
-    def figure_packettx_from_ueipids(self, ue_ipid_list : list):
+
+    def figure_packettx_from_ue_rlc_srn(self, ue_rlc_srn_list : list, silent = False):
+
+        packets = []
+        for idx, ue_rlc_srn in enumerate(ue_rlc_srn_list):
+            if not silent:
+                print(f"\rProcessing packet {idx + 1}/{len(ue_rlc_srn_list)} ({(idx + 1) / len(ue_rlc_srn_list) * 100:.2f}%) with ip_id: {ue_rlc_srn}", end="")
+            filtered_df = self.ue_iprlc_rel_df[self.ue_iprlc_rel_df['rlc.txpdu.srn'] == ue_rlc_srn]
+            ipid_set = set()
+            txpdu_id_set = set()
+            for i in range(filtered_df.shape[0]):
+                ipid_set.add(filtered_df.iloc[i]['ip_id'])
+                txpdu_id_set.add(filtered_df.iloc[i]['txpdu_id'])
+
+            logger.debug(f"Found {len(ipid_set)} related ipid(s) and {len(txpdu_id_set)} TXPDU(s) for UE rlc srn:{ue_rlc_srn}")
+
+            if len(ipid_set) > 1:
+                logger.error(f"More than one related ue ipids: {ipid_set} for UE rlc srn:{ue_rlc_srn}.")
+                continue
+
+            if len(ipid_set) == 0:
+                logger.error(f"No related ue ipids for UE rlc srn:{ue_rlc_srn}.")
+                continue
+
+            if len(txpdu_id_set) == 0:
+                logger.error(f"No related ue TXPDU ids for UE rlc srn:{ue_rlc_srn}.")
+                continue
+
+            ip_id = ipid_set.pop()
+            sn = ue_rlc_srn
+            logger.debug(f"The UE ipid found: {ip_id}")
+
+            # get the ue ip row
+            ue_ip_row = self.ue_ip_packets_df[self.ue_ip_packets_df['ip_id'] == ip_id].iloc[0]
+
+            ue_rlc_rows = []
+            for txpdu_id in txpdu_id_set:
+                ue_rlc_rows.append(self.ue_rlc_segments_df[self.ue_rlc_segments_df['txpdu_id'] == txpdu_id].iloc[0])
+
+            result_df = self.gnb_ip_packets_df[self.gnb_ip_packets_df['gtp.out.sn'] == ue_rlc_srn]
+            if result_df.shape[0] == 0:
+                logger.error(f"UE SN {sn} for UE IP ID {ip_id} could not be found on GNB side. Dropped packet?")
+                continue
+            gnb_ip_row = result_df.iloc[0]
+
+            filtered_df = self.gnb_iprlc_rel_df[self.gnb_iprlc_rel_df['gtp.out.sn'] == ue_rlc_srn]
+            gnb_rlc_rows = []
+            for i in range(filtered_df.shape[0]):
+                sdu_id = int(filtered_df.iloc[i]['sdu_id'])
+                gnb_rlc_rows.append(self.gnb_rlc_segments_df[self.gnb_rlc_segments_df['sdu_id'] == sdu_id].iloc[0])
+
+            logger.debug(f"Found {len(txpdu_id_set)} gnb sdu_id(s) for SN:{ue_rlc_srn}")
+
+            if len(txpdu_id_set) == 0 :
+                logger.error(f"No related gnb txpdu ids found for UE ip_id:{ip_id} and sn:{ue_rlc_srn}")
+                continue
+
+            # start packet dict
+            packet = {
+                'sn' : gnb_ip_row['gtp.out.sn'],
+                'id' : ip_id,
+                'len' : int(ue_ip_row['ip.in.length']),
+                'ip.in_t' : float(ue_ip_row['ip.in.timestamp']),
+                'ip.out_t' : float(gnb_ip_row['gtp.out.timestamp']),
+                'rlc.in_t' : float(ue_ip_row['rlc.queue.timestamp']),
+                'rlc.out_t' : None,
+                'backlog' : int(ue_ip_row['rlc.queue.queue']),
+                'rlc.attempts' : [],
+            }
+            # find rlc and mac attempts
+            packet = self.figure_rlc_attempts(packet, gnb_rlc_rows, ue_rlc_rows)
+            packets.append(packet)
+
+        if not silent:
+            print("\n", end="")
+        return packets
+
+
+    def figure_packettx_from_ueipids(self, ue_ipid_list : list, silent = False):
     
         packets = []
         # first sort the ipids based on the packets arrival time
@@ -125,7 +214,8 @@ class ULPacketAnalyzer:
 
         # then do the actual work
         for idx, ip_id in enumerate(sorted_ids_list):
-            print(f"\rProcessing packet {idx + 1}/{len(sorted_ids_list)} ({(idx + 1) / len(sorted_ids_list) * 100:.2f}%) with ip_id: {ip_id}", end="")
+            if not silent:
+                print(f"\rProcessing packet {idx + 1}/{len(sorted_ids_list)} ({(idx + 1) / len(sorted_ids_list) * 100:.2f}%) with ip_id: {ip_id}", end="")
             ue_ip_row = self.ue_ip_packets_df[self.ue_ip_packets_df['ip_id'] == ip_id].iloc[0]
             filtered_df = self.ue_iprlc_rel_df[self.ue_iprlc_rel_df['ip_id'] == ip_id]
             sn_set = set()
@@ -137,7 +227,7 @@ class ULPacketAnalyzer:
             logger.debug(f"Found {len(sn_set)} related SN(s) and {len(txpdu_id_set)} TXPDU(s) for UE ip_id:{ip_id}")
 
             if len(sn_set) > 1:
-                logger.error(f"More than one related ue SNs for UE ip_id:{ip_id}.")
+                logger.error(f"More than one related ue SNs: {sn_set} for UE ip_id:{ip_id}.")
                 continue
 
             if len(sn_set) == 0:
@@ -189,8 +279,10 @@ class ULPacketAnalyzer:
             packet = self.figure_rlc_attempts(packet, gnb_rlc_rows, ue_rlc_rows)
             packets.append(packet)
 
-        print("\n", end="")
+        if not silent:
+            print("\n", end="")
         return packets
+
 
     def figure_mac_attempts(self, rlcattempt, ue_rlc_row, ue_ip_in_ts, ue_ip_out_ts):
 
@@ -242,8 +334,13 @@ class ULPacketAnalyzer:
         ]
         sorted_hq_attempts = hq_attempts.sort_values(by='phy.tx.timestamp', ascending=True, inplace=False)
         first_ndi_row = sorted_hq_attempts[sorted_hq_attempts['mac.harq.ndi'] == 1]
-        #first_ndi1_attempt_ts = float(first_ndi_row.head(1)['phy.tx.timestamp'])
-        first_ndi1_attempt_ts = float(first_ndi_row['phy.tx.timestamp'].iloc[0])
+
+        if not first_ndi_row.empty:
+            #first_ndi1_attempt_ts = float(first_ndi_row.head(1)['phy.tx.timestamp'])
+            first_ndi1_attempt_ts = float(first_ndi_row['phy.tx.timestamp'].iloc[0])
+        else:
+            logger.error(f"No rows with mac.harq.ndi == 1 found: {dict(ue_rlc_row)}.")
+            return rlcattempt
 
         # find all attempts with timestamps less than this
         ue_mac_attempts = self.ue_mac_attempts_df[

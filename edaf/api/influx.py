@@ -48,45 +48,22 @@ def convert_to_ms(value):
     raise ValueError(f"Unsupported value type: {type(value)}")
 
 class InfluxClient:
-    def __init__(self, influx_db_address, token, bucket, org):
-        self.bucket = bucket
+    def __init__(self, influx_db_address, token, org):
         self.org = org
         self.influx_db_address = influx_db_address
         self.token = token
         self.client = InfluxDBClient(url=influx_db_address, token=token)
         self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
+        self.query_api = self.client.query_api()
 
-    def push_dataframe(self, df, point_name, time_key):
+    def create_bucket(self, bucket):
+        buckets_api = self.client.buckets_api()
 
-        points = []
+        bucket_names = [b.name for b in buckets_api.find_buckets().buckets]
+        if bucket not in bucket_names:
+            buckets_api.create_bucket(bucket_name=bucket, org=self.org, retention_rules=[])
 
-        for index, row in df.iterrows():
-
-            point = Point(point_name)
-            for col in df.columns:
-                if col == time_key:
-                    continue
-                value = row[col]
-                # Skip None, NaNs, nans
-                if pd.isnull(value) or pd.isna(value) or (isinstance(value, float) and math.isnan(value)):
-                    continue
-
-                if ('buf' in col.lower()) or ('rnti' in col.lower()) or ( col.lower() == "source" ):
-                    point = point.field(col, str(value))
-                else:
-                    if is_duration_string(value):
-                        # This is a duration, convert to ms float
-                        value = convert_to_ms(value)
-
-                    point = point.field(col, float(value))
-
-            point = point.time(int(float(row[time_key]) * 1e9), WritePrecision.NS)
-            points.append(point)
-
-        if points:
-            self.write_api.write(self.bucket, self.org, points)
-
-    def push_dataframe_list(self, publish_list):
+    def push_dataframe_list(self, publish_list, bucket):
 
         points = []
 
@@ -100,14 +77,14 @@ class InfluxClient:
 
                 point = Point(point_name)
                 for col in df.columns:
-                    if col == time_key:
-                        continue
                     value = row[col]
+
                     # Skip None, NaNs, nans
                     if pd.isnull(value) or pd.isna(value) or (isinstance(value, float) and math.isnan(value)):
-                        logger.warning(f"[influx client] Detected None, NaNs, or nans in {point_name}, {col}")
+                        logger.debug(f"[influx client] Detected None, NaNs, or nans in {point_name}, {col}")
                         continue
 
+                    # check if we have an str or no
                     if ('buf' in col.lower()) or ('rnti' in col.lower()) or ( col.lower() == "source" ):
                         point = point.field(col, str(value))
                     else:
@@ -116,9 +93,10 @@ class InfluxClient:
                             value = convert_to_ms(value)
 
                         # check if value is non numeric, skip it. 
-                        if isinstance(value, numbers.Number):
-                            point = point.field(col, float(value))
-                        else:
+                        try:
+                            numeric_value = float(value)
+                            point = point.field(col, numeric_value)
+                        except (ValueError, TypeError):
                             logger.warning(f"[influx client] Non numeric value on a numeric field {point_name}, {col}: {value}")
                             continue
 
@@ -126,7 +104,50 @@ class InfluxClient:
                 points.append(point)
 
         if points:
-            self.write_api.write(self.bucket, self.org, points)
+            self.write_api.write(bucket, self.org, points)
+
+    def fetch_recent_data(self, bucket, duration_seconds):
+        # Ensure the duration is formatted as a float string with 's' suffix
+        duration_str = f"{duration_seconds:.9f}".rstrip("0").rstrip(".") + "s"
+
+        query = f'''
+        from(bucket: "{bucket}")
+            |> range(start: -{duration_str})
+            |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+            |> group(columns: ["_measurement"])
+        '''
+        tables = self.query_api.query(query, org=self.org)
+
+        dfs_list = []
+        for table in tables:
+            if not table.records:
+                continue
+
+            measurement = table.records[0].get_measurement()
+            records = [record.values for record in table.records]
+
+            df = pd.DataFrame(records)
+            df.rename(columns={"_time": "time"}, inplace=True)
+            df.drop(columns=["result", "table", "_start", "_stop"], errors="ignore", inplace=True)
+
+            # Convert all columns containing "buf" in their name to int
+            for col in df.columns:
+                if "buf" in col.lower():
+                    try:
+                        df[col] = df[col].astype(float)
+                        df[col] = df[col].astype(int)
+                    except Exception as e:
+                        logger.warning(f"[influx client] Failed to convert column {col} to int: {e}")
+
+            dfs_list.append(
+                {
+                    "df": df,
+                    "point_name": measurement,
+                    "time_key": "time"
+                }
+            )
+
+        return dfs_list
 
     def __del__(self):
         self.client.close()
