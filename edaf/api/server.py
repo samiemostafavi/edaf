@@ -31,10 +31,9 @@ PACKET_ANALYZE_SLEEP_S = 1 # while loop sleep duration in seconds
 MIN_NUM_PACKETS_TO_ANALYZE = 200
 
 org = "expeca"
-bucket = "latency"
+bucket = "edaf_raw"
 influx_db_address = "http://0.0.0.0:8086"
 auth_info_addr = "/EDAF/influx_auth.json"
-point_name = "packet_records"
 
 
 def pop_q_items(items_queue : multiprocessing.Queue):                
@@ -45,13 +44,7 @@ def pop_q_items(items_queue : multiprocessing.Queue):
 
 
 def analyze_and_publish(upf_journeys_queue, gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue, ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue, config):
-
-    # set standalone var
-    if (gnb_ip_packets_queue is None) and (ue_ip_packets_queue is None):
-        standalone = True
-    else:
-        standalone = False
-
+    # stats counters initialize
     stats_rcv_upf, stats_rcv_gnb_ip, stats_rcv_gnb_rlc, stats_rcv_gnb_mac, stats_rcv_gnb_mcs, stats_rcv_ue_ip, stats_rcv_ue_rlc, stats_rcv_ue_mac = 0, 0, 0, 0, 0, 0, 0, 0
     stats_published_upf_items, stats_published_gnb_ip_items, stats_published_gnb_rlc_items, stats_gnb_mac_items, stats_gnb_mcs_items, stats_ue_ip_items, stats_ue_rlc_items, stats_ue_mac_items = 0, 0, 0, 0, 0, 0, 0, 0
 
@@ -59,12 +52,12 @@ def analyze_and_publish(upf_journeys_queue, gnb_ip_packets_queue, gnb_rlc_segmen
 
     if config["influx_token"]:
         influx_cli = InfluxClient(influx_db_address, config["influx_token"], bucket, org)
-        logger.info("[combine journeys] influxDB client initialized")
+        logger.success("[combine journeys] influxDB client initialized")
     else:
         influx_cli = None
-        logger.warning("[combine journeys] influxDB client NONE")
+        logger.error("[combine journeys] influxDB client NONE")
 
-    logger.info(f"[combine journeys] process starts.")
+    logger.success(f"[combine journeys] process starts.")
     
     while True:
         
@@ -80,62 +73,57 @@ def analyze_and_publish(upf_journeys_queue, gnb_ip_packets_queue, gnb_rlc_segmen
             start_time = current_time
     
         try:
-            if not standalone:
-                upf_items = pop_q_items(upf_journeys_queue)
-                stats_rcv_upf += len(upf_items)
-                
-                gnb_ip_items = pop_q_items(gnb_ip_packets_queue)
-                stats_rcv_gnb_ip += len(gnb_ip_items)
 
-                gnb_rlc_items = pop_q_items(gnb_rlc_segments_queue)
-                stats_rcv_gnb_rlc += len(gnb_rlc_items)
-
-                gnb_mac_items = pop_q_items(gnb_mac_attempts_queue)
-                stats_rcv_gnb_mac += len(gnb_mac_items)
-
-                gnb_mcs_items = pop_q_items(gnb_mcs_reports_queue)
-                stats_rcv_gnb_mcs += len(gnb_mcs_items)
-
-                ue_ip_items = pop_q_items(ue_ip_packets_queue)
-                stats_rcv_ue_ip += len(ue_ip_items)
-
-                ue_rlc_items = pop_q_items(ue_rlc_segments_queue)
-                stats_rcv_ue_rlc += len(ue_rlc_items)
-
-                ue_mac_items = pop_q_items(ue_mac_attempts_queue)
-                stats_rcv_ue_mac += len(ue_mac_items)
-            else:
-                upf_items = pop_q_items(upf_journeys_queue, JOURNEYS_THRESHOLD_UPF)
-
+            upf_items = pop_q_items(upf_journeys_queue)
+            stats_rcv_upf += len(upf_items)
+            upf_items_df = pd.DataFrame(upf_items) 
             
-            upf_items_df = pd.DataFrame(upf_items)
-            if not standalone:
-                # convert to df
-                
-                gnb_ip_items_df = pd.DataFrame(gnb_ip_items)
-                gnb_rlc_items_df = pd.DataFrame(gnb_rlc_items)
-                gnb_mac_items_df = pd.DataFrame(gnb_mac_items)
-                gnb_mcs_items_df = pd.DataFrame(gnb_mcs_items)
-                ue_ip_items_df = pd.DataFrame(ue_ip_items)
-                ue_rlc_items_df = pd.DataFrame(ue_rlc_items)
-                ue_mac_items_df = pd.DataFrame(ue_mac_items)
+            gnb_ip_items = pop_q_items(gnb_ip_packets_queue)
+            stats_rcv_gnb_ip += len(gnb_ip_items)
+            gnb_ip_items_df = pd.DataFrame(gnb_ip_items)
 
-                # Create gnb databases relationship
-                # For each 'gtp.out.sn' in gnb_ip_packets_df, find corresponding 'sdu_id' entries in gnb_rlc_segments_df
-                #gnb_iprlc_rel_df = pd.merge(gnb_ip_items_df[['gtp.out.sn']],
-                #                        gnb_rlc_items_df[['rlc.reassembled.sn', 'sdu_id']],
-                #                        left_on='gtp.out.sn', right_on='rlc.reassembled.sn')
-                #gnb_iprlc_rel_df = gnb_iprlc_rel_df.drop(columns=['rlc.reassembled.sn'])
+            gnb_rlc_items = pop_q_items(gnb_rlc_segments_queue)
+            stats_rcv_gnb_rlc += len(gnb_rlc_items)
+            gnb_rlc_items_df = pd.DataFrame(gnb_rlc_items)
 
-                # For each pair of ['rlc.queue.R2buf', 'rlc.queue.sn'] in ue_ip_packets_df,
-                # find corresponding entries in ue_rlc_segments_df with the same values for ['rlc.txpdu.R2buf', 'rlc.txpdu.sn']
-                #ue_iprlc_rel_df = pd.merge(ue_ip_items_df[['rlc.queue.R2buf', 'rlc.queue.sn',  'ip_id']],
-                #                        ue_rlc_items_df[['rlc.txpdu.R2buf', 'rlc.txpdu.sn', 'rlc.txpdu.srn','rlc.txpdu.timestamp', 'rlc.txpdu.length', 'txpdu_id']],  # Additional columns from ue_rlc_segments_df
-                #                        left_on=['rlc.queue.R2buf', 'rlc.queue.sn'],
-                #                        right_on=['rlc.txpdu.R2buf', 'rlc.txpdu.sn'])
-                #ue_iprlc_rel_df = ue_iprlc_rel_df.drop(columns=['rlc.queue.R2buf', 'rlc.queue.sn' , 'rlc.txpdu.R2buf', 'rlc.txpdu.sn', 'rlc.txpdu.timestamp', 'rlc.txpdu.length'])
+            gnb_mac_items = pop_q_items(gnb_mac_attempts_queue)
+            stats_rcv_gnb_mac += len(gnb_mac_items)
+            gnb_mac_items_df = pd.DataFrame(gnb_mac_items)
+
+            gnb_mcs_items = pop_q_items(gnb_mcs_reports_queue)
+            stats_rcv_gnb_mcs += len(gnb_mcs_items)
+            gnb_mcs_items_df = pd.DataFrame(gnb_mcs_items)
+
+            ue_ip_items = pop_q_items(ue_ip_packets_queue)
+            stats_rcv_ue_ip += len(ue_ip_items)
+            ue_ip_items_df = pd.DataFrame(ue_ip_items)
+
+            ue_rlc_items = pop_q_items(ue_rlc_segments_queue)
+            stats_rcv_ue_rlc += len(ue_rlc_items)
+            ue_rlc_items_df = pd.DataFrame(ue_rlc_items)
+
+            ue_mac_items = pop_q_items(ue_mac_attempts_queue)
+            stats_rcv_ue_mac += len(ue_mac_items)
+            ue_mac_items_df = pd.DataFrame(ue_mac_items)  
+
+            # Create gnb databases relationship
+            # For each 'gtp.out.sn' in gnb_ip_packets_df, find corresponding 'sdu_id' entries in gnb_rlc_segments_df
+            #gnb_iprlc_rel_df = pd.merge(gnb_ip_items_df[['gtp.out.sn']],
+            #                        gnb_rlc_items_df[['rlc.reassembled.sn', 'sdu_id']],
+            #                        left_on='gtp.out.sn', right_on='rlc.reassembled.sn')
+            #gnb_iprlc_rel_df = gnb_iprlc_rel_df.drop(columns=['rlc.reassembled.sn'])
+
+            # For each pair of ['rlc.queue.R2buf', 'rlc.queue.sn'] in ue_ip_packets_df,
+            # find corresponding entries in ue_rlc_segments_df with the same values for ['rlc.txpdu.R2buf', 'rlc.txpdu.sn']
+            #ue_iprlc_rel_df = pd.merge(ue_ip_items_df[['rlc.queue.R2buf', 'rlc.queue.sn',  'ip_id']],
+            #                        ue_rlc_items_df[['rlc.txpdu.R2buf', 'rlc.txpdu.sn', 'rlc.txpdu.srn','rlc.txpdu.timestamp', 'rlc.txpdu.length', 'txpdu_id']],  # Additional columns from ue_rlc_segments_df
+            #                        left_on=['rlc.queue.R2buf', 'rlc.queue.sn'],
+            #                        right_on=['rlc.txpdu.R2buf', 'rlc.txpdu.sn'])
+            #ue_iprlc_rel_df = ue_iprlc_rel_df.drop(columns=['rlc.queue.R2buf', 'rlc.queue.sn' , 'rlc.txpdu.R2buf', 'rlc.txpdu.sn', 'rlc.txpdu.timestamp', 'rlc.txpdu.length'])
 
             if influx_cli:
+
+                publish_list = []
 
                 if len(upf_items_df) > 0:
                     # Convert to numeric (force errors to NaN if needed)
@@ -150,37 +138,55 @@ def analyze_and_publish(upf_journeys_queue, gnb_ip_packets_queue, gnb_rlc_segmen
                     upf_items_df["rt_sec"] = upf_items_df["rt"] // 1_000_000_000
 
                     # Push to InfluxDB
-                    influx_cli.push_dataframe(upf_items_df, point_name="upf", time_key="st_sec")
+                    publish_list.append(
+                        { "df" : upf_items_df, "point_name": "upf", "time_key": "st_sec" }
+                    )
                     stats_published_upf_items += len(upf_items_df)
 
-                if not standalone:
-                    if len(gnb_ip_items_df)>0:
-                        influx_cli.push_dataframe(gnb_ip_items_df,point_name="gnb_ip",time_key="gtp.out.timestamp")
-                        stats_published_gnb_ip_items += len(gnb_ip_items_df)
+                if len(gnb_ip_items_df)>0:
+                    publish_list.append(
+                        { "df" : gnb_ip_items_df, "point_name": "gnb_ip", "time_key": "gtp.out.timestamp" }
+                    )
+                    stats_published_gnb_ip_items += len(gnb_ip_items_df)
 
-                    if len(gnb_rlc_items_df)>0:
-                        influx_cli.push_dataframe(gnb_rlc_items_df,point_name="gnb_rlc",time_key="rlc.reassembled.timestamp")
-                        stats_published_gnb_rlc_items += len(gnb_rlc_items_df)
+                if len(gnb_rlc_items_df)>0:
+                    publish_list.append(
+                        { "df" : gnb_rlc_items_df, "point_name": "gnb_rlc", "time_key": "rlc.reassembled.timestamp" }
+                    )
+                    stats_published_gnb_rlc_items += len(gnb_rlc_items_df)
 
-                    if len(gnb_mac_items_df)>0:
-                        influx_cli.push_dataframe(gnb_mac_items_df,point_name="gnb_mac",time_key="phy.detectstart.timestamp")
-                        stats_gnb_mac_items += len(gnb_mac_items_df)
+                if len(gnb_mac_items_df)>0:
+                    publish_list.append(
+                        { "df" : gnb_mac_items_df, "point_name": "gnb_mac", "time_key": "phy.detectstart.timestamp" }
+                    )
+                    stats_gnb_mac_items += len(gnb_mac_items_df)
 
-                    if len(gnb_mcs_items_df)>0:
-                        influx_cli.push_dataframe(gnb_mcs_items_df,point_name="gnb_mcs",time_key="timestamp")
-                        stats_gnb_mcs_items += len(gnb_mcs_items_df)
+                if len(gnb_mcs_items_df)>0:
+                    publish_list.append(
+                        { "df" : gnb_mcs_items_df, "point_name": "gnb_mcs", "time_key": "timestamp" }
+                    )
+                    stats_gnb_mcs_items += len(gnb_mcs_items_df)
 
-                    if len(ue_ip_items_df)>0:
-                        influx_cli.push_dataframe(ue_ip_items_df,point_name="ue_ip",time_key="ip.in.timestamp")
-                        stats_ue_ip_items += len(ue_ip_items_df)
+                if len(ue_ip_items_df)>0:
+                    publish_list.append(
+                        { "df" : ue_ip_items_df, "point_name": "ue_ip", "time_key": "ip.in.timestamp" }
+                    )
+                    stats_ue_ip_items += len(ue_ip_items_df)
 
-                    if len(ue_rlc_items_df)>0:
-                        influx_cli.push_dataframe(ue_rlc_items_df,point_name="ue_rlc",time_key="rlc.txpdu.timestamp")
-                        stats_ue_rlc_items += len(ue_rlc_items_df)
+                if len(ue_rlc_items_df)>0:
+                    publish_list.append(
+                        { "df" : ue_rlc_items_df, "point_name": "ue_rlc", "time_key": "rlc.txpdu.timestamp" }
+                    )
+                    stats_ue_rlc_items += len(ue_rlc_items_df)
 
-                    if len(ue_mac_items_df)>0:
-                        influx_cli.push_dataframe(ue_mac_items_df,point_name="ue_mac",time_key="mac.harq.timestamp")
-                        stats_ue_mac_items += len(ue_mac_items_df)
+                if len(ue_mac_items_df)>0:
+                    publish_list.append(
+                        { "df" : ue_mac_items_df, "point_name": "ue_mac", "time_key": "mac.harq.timestamp" }
+                    )
+                    stats_ue_mac_items += len(ue_mac_items_df)
+
+                if publish_list:
+                    influx_cli.push_dataframe_list(publish_list)
                 
             else:
                 logger.warning(f"[combine journeys] Failed to push {len(upf_items_df)} upf records to the database as influx cli is not setup.")
@@ -271,7 +277,7 @@ def queue_process(
         rdts = None
         proc = None
 
-    logger.info(f"[{client_name} queue process] starts.")
+    logger.success(f"[{client_name} queue process] starts.")
 
     raw_inputs = []
     journeys = []
@@ -411,7 +417,7 @@ async def handle_client(reader, writer, client_name, config, rawdata_queue):
                 break
             if init:
                 addr = writer.get_extra_info('peername')
-                logger.info(f"[{client_name} server] connection from {addr}.")
+                logger.success(f"[{client_name} server] connection from {addr}.")
                 init = False
             message = data.decode(errors='ignore')
             if message[-1] == '\n':
@@ -465,7 +471,7 @@ async def async_net_server(client_name, config, rawdata_queue):
         port=config[client_name]["PORT"]
     )
     
-    logger.info(f'[{client_name} server] serving on {server.sockets[0].getsockname()}')
+    logger.success(f'[{client_name} server] serving on {server.sockets[0].getsockname()}')
 
     async with server:
         await server.serve_forever()
@@ -477,16 +483,7 @@ def serve():
 
     # get version
     from .. import __version__
-    logger.info(f"[main] Running EDAF server v{__version__}")
-
-    # get standalone env variable
-    standalone_var_str = os.environ.get("STANDALONE")
-    if standalone_var_str is not None:
-        standalone = standalone_var_str.lower() in ['true', '1', 'yes']
-    else:
-        standalone = False
-
-    logger.info(f"[main] Standalone mode:{standalone}")
+    logger.success(f"[main] Running EDAF server v{__version__}")
 
     # read influxtoken
     try:
@@ -500,35 +497,31 @@ def serve():
         # If the file doesn't exist, set token to None
         token = None
 
+    upf_rawdata_queue = Queue(MAX_L1_UPF_DEPTH)
+    upf_journeys_queue = Queue(MAX_L2_UPF_DEPTH)
+    gnb_rawdata_queue = None
+    ue_rawdata_queue = None
+    
     config = {
         "influx_token" : token,
         "UPF": {
             "PORT": 50009,
             "BUFFER_SIZE": 1000
+        },
+        "GNB": {
+            "PORT": 50015,
+            "BUFFER_SIZE": 1000
+        },
+        "UE": {
+            "PORT": 50011,
+            "BUFFER_SIZE": 1000
         }
     }
-    upf_rawdata_queue = Queue(MAX_L1_UPF_DEPTH)
-    upf_journeys_queue = Queue(MAX_L2_UPF_DEPTH)
-    gnb_rawdata_queue = None
-    ue_rawdata_queue = None
 
-    if not standalone:
-        config = {
-            **config,
-            "GNB": {
-                "PORT": 50015,
-                "BUFFER_SIZE": 1000
-            },
-            "UE": {
-                "PORT": 50011,
-                "BUFFER_SIZE": 1000
-            }
-        }
-
-        gnb_rawdata_queue = Queue(MAX_L1_GNB_DEPTH)
-        ue_rawdata_queue = Queue(MAX_L1_UE_DEPTH)
-        gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue = Queue(MAX_L2_GNB_DEPTH), Queue(MAX_L2_GNB_DEPTH), Queue(MAX_L2_GNB_DEPTH), Queue(MAX_L2_GNB_DEPTH)
-        ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue = Queue(MAX_L2_UE_DEPTH), Queue(MAX_L2_UE_DEPTH), Queue(MAX_L2_UE_DEPTH)
+    gnb_rawdata_queue = Queue(MAX_L1_GNB_DEPTH)
+    ue_rawdata_queue = Queue(MAX_L1_UE_DEPTH)
+    gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue = Queue(MAX_L2_GNB_DEPTH), Queue(MAX_L2_GNB_DEPTH), Queue(MAX_L2_GNB_DEPTH), Queue(MAX_L2_GNB_DEPTH)
+    ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue = Queue(MAX_L2_UE_DEPTH), Queue(MAX_L2_UE_DEPTH), Queue(MAX_L2_UE_DEPTH)
 
     try:
         # UPF
