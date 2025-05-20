@@ -3,6 +3,7 @@ from collections import deque
 from loguru import logger
 from multiprocessing import Process, Queue
 from multiprocessing import Manager
+import numpy as np
 
 import pandas as pd
 
@@ -144,15 +145,33 @@ def decompose_packet_delays(flat_packet, complete_packet):
     return delays
 
 
-def flatten_decomposed_packets(decomposed_packets_list: list):
+def flatten_decomposed_packets(decomposed_packets_list: list, upf_items_df):
     flat_packets = []
 
     for dec_packet in decomposed_packets_list:
         rlc_attempts = dec_packet.get('rlc.attempts')
 
+        # match this decoded packet with nlmt items
+        ip_in_t = dec_packet.get('ip.in_t')
+        app_in_t = None
+        app_out_t = None
+        app_e2e_delay = None
+        if ip_in_t is not None and not np.isnan(ip_in_t) and not upf_items_df.empty:
+            try:
+                time_diffs = np.abs(upf_items_df["st_sec"] - ip_in_t)
+                closest_index = time_diffs.idxmin()
+                app_in_t = upf_items_df.loc[closest_index, "st_sec"]
+                app_out_t = upf_items_df.loc[closest_index, "rt_sec"]
+                app_e2e_delay = (app_out_t - app_in_t)*1000
+            except Exception as e:
+                logger.warning(f"[flatten_decomposed_packets] Failed to match UPF timing for SN {dec_packet.get('sn')}: {e}")
+
         if not rlc_attempts:
             # If rlc_attempts is None or empty, set all dependent metrics to None
             res_flat_packet = {
+                'app.in_t': app_in_t,
+                'app.out_t': app_out_t,
+                'app.e2e_delay': app_e2e_delay,
                 'sn': dec_packet.get('sn'),
                 'ip.len': dec_packet.get('len'),
                 'ip.in_t': dec_packet.get('ip.in_t'),
@@ -215,6 +234,9 @@ def flatten_decomposed_packets(decomposed_packets_list: list):
             return max(values)
 
         res_flat_packet = {
+            'app.in_t': app_in_t,
+            'app.out_t': app_out_t,
+            'app.e2e_delay': app_e2e_delay,
             'sn': dec_packet.get('sn'),
             'ip.len': dec_packet.get('len'),
             'ip.in_t': dec_packet.get('ip.in_t'),
@@ -366,7 +388,9 @@ def packets_decompose(config):
                 packet_analyzer = ULPacketAnalyzer(upf_items_df, gnb_ip_items_df, gnb_rlc_items_df, gnb_iprlc_rel_df, gnb_mac_items_df, gnb_mcs_items_df, ue_ip_items_df, ue_rlc_items_df, ue_mac_items_df, ue_iprlc_rel_df)
                 ue_srns_arr = list(range(int(packet_analyzer.first_rlcsrn), int(packet_analyzer.last_rlcsrn)))
                 decomposed_packets_list = packet_analyzer.figure_packettx_from_ue_rlc_srn(ue_srns_arr, silent = True)
-                flat_decomposed_packets_list = flatten_decomposed_packets(decomposed_packets_list)
+
+                # combine with UPF and decompose
+                flat_decomposed_packets_list = flatten_decomposed_packets(decomposed_packets_list, upf_items_df)
                 analyzed_packets_df = pd.DataFrame(flat_decomposed_packets_list)
 
                 logger.debug(f"{analyzed_packets_df}")
