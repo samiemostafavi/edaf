@@ -45,6 +45,9 @@ def find_ip_packets(previous_lines : RingBuffer, lines):
                 }
                 logger.debug(f"[GNB] Found '{KW_R}' in line {line_number}, {journey}")
                 snp = f"sn{sn_value}"
+                # Issue fixed: if do (snp in prev_line) for 'sn15' in the line above, it will return true!
+                # so we should do a regex instead
+                snp_re = rf'(?<!\w){re.escape(snp)}(?!\d)'
                 sbufp = f"SBuf{sbuf_value}"
             else:
                 logger.warning(f"[GNB] Found '{KW_R}' in line {line_number}, but properties did not match, skipping this {KW_R}.")
@@ -58,7 +61,7 @@ def find_ip_packets(previous_lines : RingBuffer, lines):
             KW_SDAP = 'sdap.sdu'
             found_KW_SDAP = False
             for id,prev_line in enumerate(prev_lines):    
-                if ('--'+KW_SDAP in prev_line) and (sbufp in prev_line) and (snp in prev_line):
+                if ('--'+KW_SDAP in prev_line) and (sbufp in prev_line) and (re.search(snp_re, prev_line)):
                     timestamp_match = re.search(r'^(\d+\.\d+)', prev_line)
                     len_match = re.search(r'len(\d+)', prev_line)
                     pbuf_match = re.search(r'PBuf(\d+)', prev_line)
@@ -88,7 +91,7 @@ def find_ip_packets(previous_lines : RingBuffer, lines):
             KW_PDCP = 'pdcp.decoded'
             found_KW_PDCP = False
             for id,prev_line in enumerate(prev_lines):
-                if ('--'+KW_PDCP in prev_line) and (pbufp in prev_line) and (snp in prev_line):
+                if ('--'+KW_PDCP in prev_line) and (pbufp in prev_line) and (re.search(snp_re, prev_line)):
                     timestamp_match = re.search(r'^(\d+\.\d+)', prev_line)
                     len_match = re.search(r'len(\d+)', prev_line)
                     pibuf_match = re.search(r'PIBuf(\d+)', prev_line)
@@ -118,7 +121,7 @@ def find_ip_packets(previous_lines : RingBuffer, lines):
             KW_PDCPIND = 'pdcp.ind'
             found_KW_PDCPIND = False
             for id,prev_line in enumerate(prev_lines):
-                if ('--'+KW_PDCPIND in prev_line) and (pibufp in prev_line) and (snp in prev_line):
+                if ('--'+KW_PDCPIND in prev_line) and (pibufp in prev_line) and (re.search(snp_re, prev_line)):
                     timestamp_match = re.search(r'^(\d+\.\d+)', prev_line)
                     len_match = re.search(r'len(\d+)', prev_line)
                     if len_match and timestamp_match and sn_match:

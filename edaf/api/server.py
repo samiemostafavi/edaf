@@ -1,7 +1,9 @@
-import threading, traceback, time, os, json, asyncio, multiprocessing, queue
+import threading, traceback, time, os, json, asyncio, multiprocessing, queue, copy
 from collections import deque
 from loguru import logger
 from multiprocessing import Process, Queue
+from multiprocessing import Manager
+
 import pandas as pd
 
 from edaf.core.common.timestamp import rdtsctotsOnline
@@ -11,28 +13,59 @@ from edaf.core.uplink.nlmt import process_ul_nlmt
 from edaf.core.uplink.analyze_packet import ULPacketAnalyzer
 from edaf.api.influx import InfluxClient
 
-MAX_L1_UPF_DEPTH = 5000 # lines
+MAX_L1_UPF_DEPTH = 40 # lines in one page
+QPROC_SLEEP_UPF_S = 0.5 # how often read one page and process it
 
-MAX_L1_GNB_DEPTH = 5000 # lines
-RAW_LINES_THRESHOLD_GNB = 500
+MAX_L1_GNB_DEPTH = 5000 # lines in one page
+QPROC_SLEEP_GNB_S = 0.5 # how often read one page and process it
 
-MAX_L1_UE_DEPTH = 5000 # lines
-RAW_LINES_THRESHOLD_UE = 500
+MAX_L1_UE_DEPTH = 2500 # lines in one page
+QPROC_SLEEP_UE_S = 0.5 # how often read one page and process it
 
 LOGGING_PERIOD_SEC = 2
 
-PACKETS_DECOMPOSE_WINDOW_MS = 1000 # history window duration in seconds
+PACKETS_DECOMPOSE_WINDOW_MS = 2000 # history window duration in seconds
 PACKETS_DECOMPOSE_SLEEP_S = 0.1 # while loop sleep duration in seconds
-
-# this is very important to be small, 100ms is good
-PROCESS_RAW_SLEEP_S = 0.1 # while loop sleep duration in seconds
-
 
 org = "expeca"
 raw_bucket = "edaf_raw"
 main_bucket = "edaf_main"
 influx_db_address = "http://0.0.0.0:8086"
 auth_info_addr = "/EDAF/influx_auth.json"
+
+
+class SharedRingBuffer:
+    def __init__(self, size, manager):
+        self.size = size
+        self.buffer = manager.list()
+        self.lock = manager.Lock()
+
+    def append(self, item):
+        with self.lock:
+            if len(self.buffer) >= self.size:
+                self.buffer.pop(0)  # manually remove oldest
+            self.buffer.append(item)
+
+    def peek_head(self):
+        with self.lock:
+            if len(self.buffer) == 0:
+                return None
+            return copy.deepcopy(self.buffer[0])
+
+    def get_items(self):
+        with self.lock:
+            return copy.deepcopy(list(self.buffer))
+
+    def pop_items(self, n):
+        with self.lock:
+            popped = []
+            for _ in range(min(n, len(self.buffer))):
+                popped.append(self.buffer.pop(0))
+            return popped
+
+    def get_length(self):
+        with self.lock:
+            return len(self.buffer)
 
 
 def pop_q_items(items_queue : multiprocessing.Queue):                
@@ -124,6 +157,8 @@ def flatten_decomposed_packets(decomposed_packets_list: list):
                 'ip.len': dec_packet.get('len'),
                 'ip.in_t': dec_packet.get('ip.in_t'),
                 'ip.out_t': dec_packet.get('ip.out_t'),
+                # #FIXME: gtp.out.timestamp (ip.out_t) is sometimes gives a very large offset: 450ms later than rlc out which is wrong
+                # for now, we should use rlc.out_t
                 'rlc.in_t': dec_packet.get('rlc.in_t'),
                 'rlc.out_t': dec_packet.get('rlc.out_t'),
                 'backlog': dec_packet.get('backlog'),
@@ -181,9 +216,11 @@ def flatten_decomposed_packets(decomposed_packets_list: list):
 
         res_flat_packet = {
             'sn': dec_packet.get('sn'),
-            'ip.len': dec_packet.get('ip.len'),
+            'ip.len': dec_packet.get('len'),
             'ip.in_t': dec_packet.get('ip.in_t'),
             'ip.out_t': dec_packet.get('ip.out_t'),
+            # #FIXME: gtp.out.timestamp (ip.out_t) is sometimes gives a very large offset: 450ms later than rlc out which is wrong
+            # for now, we should use rlc.out_t
             'rlc.in_t': dec_packet.get('rlc.in_t'),
             'rlc.out_t': dec_packet.get('rlc.out_t'),
             'backlog': dec_packet.get('backlog'),
@@ -337,7 +374,7 @@ def packets_decompose(config):
                 for _, row in analyzed_packets_df[analyzed_packets_df['e2e_delay'] > 100].iterrows():
                     print(row.to_dict())
                 print("------------------")
-                
+
                 if analyzed_packets_df is not None:
                     stats_decomposed_packets += len(analyzed_packets_df)
                     if len(analyzed_packets_df)>0:
@@ -380,7 +417,8 @@ def packets_decompose(config):
 
 def queue_process(
             client_name, config, 
-            rawdata_queue
+            rawdata_queue,
+            sline_queue
         ):
 
     stats_dropped_lines = 0
@@ -404,12 +442,10 @@ def queue_process(
         influx_cli = None
         logger.error(f"[{client_name} queue process] influxDB client NONE")
 
-    logger.success(f"[{client_name} queue process] process starts.")
-
     if client_name == 'UE':
         if (rawdata_queue is None):
             return
-        ITEMS_PROCESS_LIMIT = RAW_LINES_THRESHOLD_UE
+        while_sleep_time = QPROC_SLEEP_UE_S
         rdts = rdtsctotsOnline("UE")
         proc = ProcessULUE(
             enable_ip_packets = True,
@@ -421,7 +457,7 @@ def queue_process(
     elif client_name == 'GNB':
         if (rawdata_queue is None):
             return
-        ITEMS_PROCESS_LIMIT = RAW_LINES_THRESHOLD_GNB
+        while_sleep_time = QPROC_SLEEP_GNB_S
         rdts = rdtsctotsOnline("GNB")
         proc = ProcessULGNB(
             enable_ip_packets = True,
@@ -435,21 +471,34 @@ def queue_process(
     elif client_name == 'UPF':
         if (rawdata_queue is None):
             return
-        ITEMS_PROCESS_LIMIT = 1
+        while_sleep_time = QPROC_SLEEP_UPF_S
         rdts = None
         proc = None
 
-    logger.success(f"[{client_name} queue process] starts.")
+    logger.success(f"[{client_name} queue process] process starts.")
 
     raw_inputs = []
     while True:
-        try:
-            try:
-                raw_inputs.append(rawdata_queue.get_nowait())
-            except queue.Empty:
-                pass
 
-            if len(raw_inputs) >= ITEMS_PROCESS_LIMIT:
+        time.sleep(while_sleep_time)
+
+        try:
+            # check if we have a full page ready
+            if rawdata_queue.get_length() == rawdata_queue.size:
+
+                # get a copy of the page
+                raw_inputs = rawdata_queue.get_items()
+
+                # update slines if not UPF
+                if client_name == 'GNB' or client_name == 'UE':
+                    slines = sline_queue.get_items()
+                    if slines:
+                        rdts.s_lines = slines
+                    else:
+                        if len(rdts.s_lines) < 2:
+                            logger.warning(f"[{client_name} queue process] waiting for CPU frequency info via S lines")
+                            continue
+
                 # update stats
                 stats_rcv_lines = stats_rcv_lines + len(raw_inputs)
                 if client_name == 'UE':
@@ -574,15 +623,16 @@ def queue_process(
             # update stats, clean the queues
             stats_dropped_lines = stats_dropped_lines + len(raw_inputs)
             raw_inputs = []
+            publish_list = []
+            upf_items_df = None
             ue_ip_packets_df, ue_rlc_segments_df, ue_mac_attempts_df = [], [], []
             gnb_ip_packets_df, gnb_rlc_segments_df, gnb_mac_attempts_df, gnb_mcs_reports_df = [], [], [], []
             upf_journeys = []
 
 
-async def handle_client(reader, writer, client_name, config, rawdata_queue):
+async def handle_client(reader, writer, client_name, config, rawdata_queue, sline_queue):
     init = True
     rem_str = ''
-    stats_dropped_lines = 0
     stats_published_lines = 0
     start_time = time.time()
 
@@ -603,11 +653,10 @@ async def handle_client(reader, writer, client_name, config, rawdata_queue):
                     rem_str = ''
                 for line in received_lines:
                     if line != 'test':
-                        try:
-                            rawdata_queue.put_nowait(line)
-                            stats_published_lines = stats_published_lines + 1
-                        except queue.Full:
-                            stats_dropped_lines = stats_dropped_lines + 1
+                        if (client_name == 'UE' or client_name == 'GNB') and (' S ' in line): # check s line
+                            sline_queue.append(line)
+                        rawdata_queue.append(line)
+                        stats_published_lines = stats_published_lines + 1
             else:
                 if '\n' in message:
                     received_lines = message.splitlines()
@@ -615,11 +664,10 @@ async def handle_client(reader, writer, client_name, config, rawdata_queue):
                     rem_str = ''
                     for line in received_lines[:-1]:
                         if line != 'test':
-                            try:
-                                rawdata_queue.put_nowait(line)
-                                stats_published_lines = stats_published_lines + 1
-                            except queue.Full:
-                                stats_dropped_lines = stats_dropped_lines + 1
+                            if (client_name == 'UE' or client_name == 'GNB') and (' S ' in line): # check s line
+                                sline_queue.append(line)
+                            rawdata_queue.append(line)
+                            stats_published_lines = stats_published_lines + 1
                     rem_str = received_lines[-1]
                 else:
                     rem_str = rem_str + message
@@ -628,7 +676,7 @@ async def handle_client(reader, writer, client_name, config, rawdata_queue):
             current_time = time.time()
             elapsed_time = current_time - start_time
             if int(elapsed_time) >= LOGGING_PERIOD_SEC:
-                logger.info(f"[{client_name} server] published lines: {stats_published_lines}, dropped lines: {stats_dropped_lines}")
+                logger.info(f"[{client_name} server] published lines: {stats_published_lines}")
                 start_time = current_time
             
     except asyncio.CancelledError:
@@ -637,12 +685,12 @@ async def handle_client(reader, writer, client_name, config, rawdata_queue):
         logger.warning(f"[{client_name} server] Closing the connection")
         writer.close()
 
-async def async_net_server(client_name, config, rawdata_queue):
+async def async_net_server(client_name, config, rawdata_queue, sline_queue):
     if rawdata_queue is None:
         return
 
     server = await asyncio.start_server(
-        lambda r, w: handle_client(r, w, client_name, config, rawdata_queue), 
+        lambda r, w: handle_client(r, w, client_name, config, rawdata_queue, sline_queue), 
         host='0.0.0.0', 
         port=config[client_name]["PORT"]
     )
@@ -652,8 +700,8 @@ async def async_net_server(client_name, config, rawdata_queue):
     async with server:
         await server.serve_forever()
 
-def net_server(client_name, config, rawdata_queue):
-    asyncio.run(async_net_server(client_name, config, rawdata_queue))
+def net_server(client_name, config, rawdata_queue, sline_queue):
+    asyncio.run(async_net_server(client_name, config, rawdata_queue, sline_queue))
 
 def serve():
 
@@ -688,23 +736,31 @@ def serve():
             "BUFFER_SIZE": 1000
         }
     }
+    manager = Manager()
 
-    gnb_rawdata_queue = Queue(MAX_L1_GNB_DEPTH)
-    ue_rawdata_queue = Queue(MAX_L1_UE_DEPTH)
-    upf_rawdata_queue = Queue(MAX_L1_UPF_DEPTH)
+    #gnb_rawdata_queue = Queue(MAX_L1_GNB_DEPTH)
+    gnb_rawdata_queue = SharedRingBuffer(size=MAX_L1_GNB_DEPTH, manager=manager)
+    gnb_sline_queue = SharedRingBuffer(size=2, manager=manager)
+
+    #ue_rawdata_queue = Queue(MAX_L1_UE_DEPTH)
+    ue_rawdata_queue = SharedRingBuffer(size=MAX_L1_UE_DEPTH, manager=manager)
+    ue_sline_queue = SharedRingBuffer(size=2, manager=manager)
+
+    #upf_rawdata_queue = Queue(MAX_L1_UPF_DEPTH)
+    upf_rawdata_queue = SharedRingBuffer(size=MAX_L1_UPF_DEPTH, manager=manager)
 
     try:
         # UPF
-        upf_server = Process(target=net_server, args=("UPF", config, upf_rawdata_queue),daemon=True)
-        upf_qprocess = Process(target=queue_process, args=("UPF", config, upf_rawdata_queue),daemon=True)
+        upf_server = Process(target=net_server, args=("UPF", config, upf_rawdata_queue, None),daemon=True)
+        upf_qprocess = Process(target=queue_process, args=("UPF", config, upf_rawdata_queue, None),daemon=True)
 
         # GNB
-        gnb_server = Process(target=net_server, args=("GNB", config, gnb_rawdata_queue),daemon=True)
-        gnb_qprocess = Process(target=queue_process, args=("GNB", config, gnb_rawdata_queue),daemon=True)
+        gnb_server = Process(target=net_server, args=("GNB", config, gnb_rawdata_queue, gnb_sline_queue),daemon=True)
+        gnb_qprocess = Process(target=queue_process, args=("GNB", config, gnb_rawdata_queue, gnb_sline_queue),daemon=True)
 
         # UE
-        ue_server = Process(target=net_server, args=("UE", config, ue_rawdata_queue),daemon=True)
-        ue_qprocess = Process(target=queue_process, args=("UE", config, ue_rawdata_queue),daemon=True)
+        ue_server = Process(target=net_server, args=("UE", config, ue_rawdata_queue, ue_sline_queue),daemon=True)
+        ue_qprocess = Process(target=queue_process, args=("UE", config, ue_rawdata_queue, ue_sline_queue),daemon=True)
 
         # COMBINE
         decompose_process = Process(target=packets_decompose, args=(config,), daemon=True)

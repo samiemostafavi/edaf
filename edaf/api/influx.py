@@ -3,6 +3,7 @@ from influxdb_client import InfluxDBClient, Point, WritePrecision
 from influxdb_client.client.write_api import SYNCHRONOUS
 from loguru import logger
 import math, re, numbers
+from decimal import Decimal
 
 def is_duration_string(value):
     if not isinstance(value, str):
@@ -100,7 +101,9 @@ class InfluxClient:
                             logger.warning(f"[influx client] Non numeric value on a numeric field {point_name}, {col}: {value}")
                             continue
 
-                point = point.time(int(float(row[time_key]) * 1e9), WritePrecision.NS)
+                #ns_time = int(float(row[time_key]) * 1e9)
+                ns_time = int(Decimal(str(row[time_key])) * Decimal('1e9'))
+                point = point.time(ns_time, WritePrecision.NS)
                 points.append(point)
 
         if points:
