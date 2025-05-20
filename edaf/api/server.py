@@ -12,24 +12,21 @@ from edaf.core.uplink.analyze_packet import ULPacketAnalyzer
 from edaf.api.influx import InfluxClient
 
 MAX_L1_UPF_DEPTH = 5000 # lines
-MAX_L2_UPF_DEPTH = 500 # journeys
 
 MAX_L1_GNB_DEPTH = 5000 # lines
-MAX_L2_GNB_DEPTH = 500 # journeys
 RAW_LINES_THRESHOLD_GNB = 500
-JOURNEYS_THRESHOLD_GNB = 20
 
 MAX_L1_UE_DEPTH = 5000 # lines
-MAX_L2_UE_DEPTH = 500 # journeys
 RAW_LINES_THRESHOLD_UE = 500
-JOURNEYS_THRESHOLD_UE = 20
 
 LOGGING_PERIOD_SEC = 2
 
 PACKETS_DECOMPOSE_WINDOW_MS = 1000 # history window duration in seconds
 PACKETS_DECOMPOSE_SLEEP_S = 0.1 # while loop sleep duration in seconds
 
-PROCESS_RAW_SLEEP_S = 1 # while loop sleep duration in seconds
+# this is very important to be small, 100ms is good
+PROCESS_RAW_SLEEP_S = 0.1 # while loop sleep duration in seconds
+
 
 org = "expeca"
 raw_bucket = "edaf_raw"
@@ -336,7 +333,11 @@ def packets_decompose(config):
                 analyzed_packets_df = pd.DataFrame(flat_decomposed_packets_list)
 
                 print(analyzed_packets_df)
-
+                print("------------------")
+                for _, row in analyzed_packets_df[analyzed_packets_df['e2e_delay'] > 100].iterrows():
+                    print(row.to_dict())
+                print("------------------")
+                
                 if analyzed_packets_df is not None:
                     stats_decomposed_packets += len(analyzed_packets_df)
                     if len(analyzed_packets_df)>0:
@@ -370,185 +371,43 @@ def packets_decompose(config):
                 if ue_rlc_items_df is None: missing.append("ue_rlc")
                 if ue_mac_items_df is None: missing.append("ue_mac")
 
-                logger.debug(f"[packets_decompose] For full decomposition, dataframes {missing} are not available.")
+                if len(missing) < 8:
+                    logger.warning(f"[packets_decompose] For full decomposition, dataframes {missing} are not available.")
 
         except Exception as ex:
             logger.error(f"[packets_decompose] {ex}")
             logger.warning(traceback.format_exc())
 
-
-def process_raw_lines(upf_journeys_queue, gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue, ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue, config):
-    # stats counters initialize
-    stats_rcv_upf, stats_rcv_gnb_ip, stats_rcv_gnb_rlc, stats_rcv_gnb_mac, stats_rcv_gnb_mcs, stats_rcv_ue_ip, stats_rcv_ue_rlc, stats_rcv_ue_mac = 0, 0, 0, 0, 0, 0, 0, 0
-    stats_published_upf_items, stats_published_gnb_ip_items, stats_published_gnb_rlc_items, stats_gnb_mac_items, stats_gnb_mcs_items, stats_ue_ip_items, stats_ue_rlc_items, stats_ue_mac_items = 0, 0, 0, 0, 0, 0, 0, 0
-
-    start_time = time.time()
-
-    if config["influx_token"]:
-        influx_cli = InfluxClient(influx_db_address, config["influx_token"], org)
-        logger.success("[process_raw_lines] influxDB client initialized")
-    else:
-        influx_cli = None
-        logger.error("[process_raw_lines] influxDB client NONE")
-
-    logger.success(f"[process_raw_lines] process starts.")
-    
-    while True:
-        
-        time.sleep(PROCESS_RAW_SLEEP_S)
-
-        # print stats
-        current_time = time.time()
-        elapsed_time = current_time - start_time
-        if int(elapsed_time) >= LOGGING_PERIOD_SEC:
-            logger.info(f"[process_raw_lines]  received entries: UPF {stats_rcv_upf}, GNB.ip {stats_rcv_gnb_ip}, GNB.rlc {stats_rcv_gnb_rlc}, GNB.mac {stats_rcv_gnb_mac}, GNB.mcs {stats_rcv_gnb_mcs}, UE.ip {stats_rcv_ue_ip}, UE.rlc {stats_rcv_ue_rlc}, UE.mac {stats_rcv_ue_mac}")
-            logger.info(f"[process_raw_lines] published entries: UPF {stats_published_upf_items}, GNB.ip {stats_published_gnb_ip_items}, GNB.rlc {stats_published_gnb_rlc_items}, GNB.mac {stats_gnb_mac_items}, GNB.mcs {stats_gnb_mcs_items}, UE.ip {stats_ue_ip_items}, UE.rlc {stats_ue_rlc_items}, UE.mac {stats_ue_mac_items}")
-
-            start_time = current_time
-    
-        try:
-
-            upf_items = pop_q_items(upf_journeys_queue)
-            stats_rcv_upf += len(upf_items)
-            upf_items_df = pd.DataFrame(upf_items) 
-            
-            gnb_ip_items = pop_q_items(gnb_ip_packets_queue)
-            stats_rcv_gnb_ip += len(gnb_ip_items)
-            gnb_ip_items_df = pd.DataFrame(gnb_ip_items)
-
-            gnb_rlc_items = pop_q_items(gnb_rlc_segments_queue)
-            stats_rcv_gnb_rlc += len(gnb_rlc_items)
-            gnb_rlc_items_df = pd.DataFrame(gnb_rlc_items)
-
-            gnb_mac_items = pop_q_items(gnb_mac_attempts_queue)
-            stats_rcv_gnb_mac += len(gnb_mac_items)
-            gnb_mac_items_df = pd.DataFrame(gnb_mac_items)
-
-            gnb_mcs_items = pop_q_items(gnb_mcs_reports_queue)
-            stats_rcv_gnb_mcs += len(gnb_mcs_items)
-            gnb_mcs_items_df = pd.DataFrame(gnb_mcs_items)
-
-            ue_ip_items = pop_q_items(ue_ip_packets_queue)
-            stats_rcv_ue_ip += len(ue_ip_items)
-            ue_ip_items_df = pd.DataFrame(ue_ip_items)
-
-            ue_rlc_items = pop_q_items(ue_rlc_segments_queue)
-            stats_rcv_ue_rlc += len(ue_rlc_items)
-            ue_rlc_items_df = pd.DataFrame(ue_rlc_items)
-
-            ue_mac_items = pop_q_items(ue_mac_attempts_queue)
-            stats_rcv_ue_mac += len(ue_mac_items)
-            ue_mac_items_df = pd.DataFrame(ue_mac_items)  
-
-            if influx_cli:
-
-                publish_list = []
-
-                if len(upf_items_df) > 0:
-                    # Convert to numeric (force errors to NaN if needed)
-                    upf_items_df["st"] = pd.to_numeric(upf_items_df["st"], errors="coerce")
-                    upf_items_df["rt"] = pd.to_numeric(upf_items_df["rt"], errors="coerce")
-
-                    # Drop rows with NaN timestamps if necessary
-                    upf_items_df.dropna(subset=["st", "rt"], inplace=True)
-
-                    # Now safe to do floor division
-                    upf_items_df["st_sec"] = upf_items_df["st"] // 1_000_000_000
-                    upf_items_df["rt_sec"] = upf_items_df["rt"] // 1_000_000_000
-
-                    # Push to InfluxDB
-                    publish_list.append(
-                        { "df" : upf_items_df, "point_name": "upf", "time_key": "st_sec" }
-                    )
-                    stats_published_upf_items += len(upf_items_df)
-
-                if len(gnb_ip_items_df)>0:
-                    publish_list.append(
-                        { "df" : gnb_ip_items_df, "point_name": "gnb_ip", "time_key": "gtp.out.timestamp" }
-                    )
-                    stats_published_gnb_ip_items += len(gnb_ip_items_df)
-
-                if len(gnb_rlc_items_df)>0:
-                    publish_list.append(
-                        { "df" : gnb_rlc_items_df, "point_name": "gnb_rlc", "time_key": "rlc.reassembled.timestamp" }
-                    )
-                    stats_published_gnb_rlc_items += len(gnb_rlc_items_df)
-
-                if len(gnb_mac_items_df)>0:
-                    publish_list.append(
-                        { "df" : gnb_mac_items_df, "point_name": "gnb_mac", "time_key": "phy.detectstart.timestamp" }
-                    )
-                    stats_gnb_mac_items += len(gnb_mac_items_df)
-
-                if len(gnb_mcs_items_df)>0:
-                    publish_list.append(
-                        { "df" : gnb_mcs_items_df, "point_name": "gnb_mcs", "time_key": "timestamp" }
-                    )
-                    stats_gnb_mcs_items += len(gnb_mcs_items_df)
-
-                if len(ue_ip_items_df)>0:
-                    publish_list.append(
-                        { "df" : ue_ip_items_df, "point_name": "ue_ip", "time_key": "ip.in.timestamp" }
-                    )
-                    stats_ue_ip_items += len(ue_ip_items_df)
-
-                if len(ue_rlc_items_df)>0:
-                    publish_list.append(
-                        { "df" : ue_rlc_items_df, "point_name": "ue_rlc", "time_key": "rlc.txpdu.timestamp" }
-                    )
-                    stats_ue_rlc_items += len(ue_rlc_items_df)
-
-                if len(ue_mac_items_df)>0:
-                    publish_list.append(
-                        { "df" : ue_mac_items_df, "point_name": "ue_mac", "time_key": "mac.harq.timestamp" }
-                    )
-                    stats_ue_mac_items += len(ue_mac_items_df)
-
-                if publish_list:
-                    influx_cli.push_dataframe_list(publish_list, raw_bucket)
-                
-            else:
-                logger.warning(f"[process_raw_lines] Failed to push {len(upf_items_df)} upf records to the database as influx cli is not setup.")            
-
-        except Exception as ex:
-            logger.error(f"[process_raw_lines] {ex}")
-            logger.warning(traceback.format_exc())
-
-
 def queue_process(
             client_name, config, 
-            rawdata_queue, 
-            ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue,
-            gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue,
-            upf_journeys_queue
+            rawdata_queue
         ):
 
     stats_dropped_lines = 0
     stats_rcv_lines = 0
     
     stats_published_upf_journeys = 0
-    stats_dropped_upf_journeys = 0
-
     stats_published_ue_ip_packets = 0
-    stats_dropped_ue_ip_packets = 0
     stats_published_ue_rlc_segments = 0
-    stats_dropped_ue_rlc_segments = 0
     stats_published_ue_mac_attempts = 0
-    stats_dropped_ue_mac_attempts = 0
-
     stats_published_gnb_ip_packets = 0
-    stats_dropped_gnb_ip_packets = 0
     stats_published_gnb_rlc_segments = 0
-    stats_dropped_gnb_rlc_segments = 0
     stats_published_gnb_mac_attempts = 0
-    stats_dropped_gnb_mac_attempts = 0
     stats_published_gnb_mcs_reports = 0
-    stats_dropped_gnb_mcs_reports = 0
 
     start_time = time.time()
 
+    if config["influx_token"]:
+        influx_cli = InfluxClient(influx_db_address, config["influx_token"], org)
+        logger.success(f"[{client_name} queue process] influxDB client initialized")
+    else:
+        influx_cli = None
+        logger.error(f"[{client_name} queue process] influxDB client NONE")
+
+    logger.success(f"[{client_name} queue process] process starts.")
+
     if client_name == 'UE':
-        if (rawdata_queue is None) or (ue_ip_packets_queue is None):
+        if (rawdata_queue is None):
             return
         ITEMS_PROCESS_LIMIT = RAW_LINES_THRESHOLD_UE
         rdts = rdtsctotsOnline("UE")
@@ -560,7 +419,7 @@ def queue_process(
             enable_sched_reports = False
         )
     elif client_name == 'GNB':
-        if (rawdata_queue is None) or (gnb_ip_packets_queue is None):
+        if (rawdata_queue is None):
             return
         ITEMS_PROCESS_LIMIT = RAW_LINES_THRESHOLD_GNB
         rdts = rdtsctotsOnline("GNB")
@@ -574,7 +433,7 @@ def queue_process(
             enable_mcs_reports = True
         )
     elif client_name == 'UPF':
-        if (rawdata_queue is None) or (upf_journeys_queue is None):
+        if (rawdata_queue is None):
             return
         ITEMS_PROCESS_LIMIT = 1
         rdts = None
@@ -583,7 +442,6 @@ def queue_process(
     logger.success(f"[{client_name} queue process] starts.")
 
     raw_inputs = []
-    journeys = []
     while True:
         try:
             try:
@@ -601,30 +459,30 @@ def queue_process(
                     l1lines.reverse()
                     if len(l1lines) > 0:
                         ue_ip_packets_df, ue_rlc_segments_df, ue_mac_attempts_df, _, _, _, _, _ = proc.run(l1lines)
-                        for index, row in ue_ip_packets_df.iterrows():
-                            try:
-                                ue_ip_packets_queue.put_nowait(row)
-                                stats_published_ue_ip_packets += 1
-                            except queue.Full:
-                                # update stats
-                                stats_dropped_ue_ip_packets += 1
 
-                        for index, row in ue_rlc_segments_df.iterrows():
-                            try:
-                                ue_rlc_segments_queue.put_nowait(row)
-                                stats_published_ue_rlc_segments += 1
-                            except queue.Full:
-                                # update stats
-                                stats_dropped_ue_rlc_segments += 1
+                        publish_list = []
+                        if len(ue_ip_packets_df)>0:
+                            publish_list.append(
+                                { "df" : ue_ip_packets_df, "point_name": "ue_ip", "time_key": "ip.in.timestamp" }
+                            )
+                            stats_published_ue_ip_packets += len(ue_ip_packets_df)
 
-                        for index, row in ue_mac_attempts_df.iterrows():
-                            try:
-                                ue_mac_attempts_queue.put_nowait(row)
-                                stats_published_ue_mac_attempts += 1
-                            except queue.Full:
-                                # update stats
-                                stats_dropped_ue_mac_attempts += 1
+                        if len(ue_rlc_segments_df)>0:
+                            publish_list.append(
+                                { "df" : ue_rlc_segments_df, "point_name": "ue_rlc", "time_key": "rlc.txpdu.timestamp" }
+                            )
+                            stats_published_ue_rlc_segments += len(ue_rlc_segments_df)
 
+                        if len(ue_mac_attempts_df)>0:
+                            publish_list.append(
+                                { "df" : ue_mac_attempts_df, "point_name": "ue_mac", "time_key": "mac.harq.timestamp" }
+                            )
+                            stats_published_ue_mac_attempts += len(ue_mac_attempts_df)
+
+                        if publish_list:
+                            influx_cli.push_dataframe_list(publish_list, raw_bucket)
+
+                        publish_list = []
                         ue_ip_packets_df, ue_rlc_segments_df, ue_mac_attempts_df = [], [], []
                         
                 elif client_name == 'GNB':
@@ -634,51 +492,66 @@ def queue_process(
                     if len(l1lines) > 0:
                         gnb_ip_packets_df, gnb_rlc_segments_df, _, _, _, gnb_mac_attempts_df, gnb_mcs_reports_df = proc.run(l1lines)
 
-                        for index, row in gnb_ip_packets_df.iterrows():
-                            try:
-                                gnb_ip_packets_queue.put_nowait(row)
-                                stats_published_gnb_ip_packets += 1
-                            except queue.Full:
-                                # update stats
-                                stats_dropped_gnb_ip_packets += 1
+                        publish_list = []
+                        if len(gnb_ip_packets_df)>0:
+                            publish_list.append(
+                                { "df" : gnb_ip_packets_df, "point_name": "gnb_ip", "time_key": "gtp.out.timestamp" }
+                            )
+                            stats_published_gnb_ip_packets += len(gnb_ip_packets_df)
 
-                        for index, row in gnb_rlc_segments_df.iterrows():
-                            try:
-                                gnb_rlc_segments_queue.put_nowait(row)
-                                stats_published_gnb_rlc_segments += 1
-                            except queue.Full:
-                                # update stats
-                                stats_dropped_gnb_rlc_segments += 1
+                        if len(gnb_rlc_segments_df)>0:
+                            publish_list.append(
+                                { "df" : gnb_rlc_segments_df, "point_name": "gnb_rlc", "time_key": "rlc.reassembled.timestamp" }
+                            )
+                            stats_published_gnb_rlc_segments += len(gnb_rlc_segments_df)
 
-                        for index, row in gnb_mac_attempts_df.iterrows():
-                            try:
-                                gnb_mac_attempts_queue.put_nowait(row)
-                                stats_published_gnb_mac_attempts += 1
-                            except queue.Full:
-                                # update stats
-                                stats_dropped_gnb_mac_attempts += 1
+                        if len(gnb_mac_attempts_df)>0:
+                            publish_list.append(
+                                { "df" : gnb_mac_attempts_df, "point_name": "gnb_mac", "time_key": "phy.detectstart.timestamp" }
+                            )
+                            stats_published_gnb_mac_attempts += len(gnb_mac_attempts_df)
 
-                        for index, row in gnb_mcs_reports_df.iterrows():
-                            try:
-                                gnb_mcs_reports_queue.put_nowait(row)
-                                stats_published_gnb_mcs_reports += 1
-                            except queue.Full:
-                                # update stats
-                                stats_dropped_gnb_mcs_reports += 1
-                        
+                        if len(gnb_mcs_reports_df)>0:
+                            publish_list.append(
+                                { "df" : gnb_mcs_reports_df, "point_name": "gnb_mcs", "time_key": "timestamp" }
+                            )
+                            stats_published_gnb_mcs_reports += len(gnb_mcs_reports_df)
+
+                        if publish_list:
+                            influx_cli.push_dataframe_list(publish_list, raw_bucket)
+
+                        publish_list = []
                         gnb_ip_packets_df, gnb_rlc_segments_df, gnb_mac_attempts_df, gnb_mcs_reports_df = [], [], [], []
 
                 elif client_name == 'UPF':
                     upf_journeys = process_ul_nlmt(raw_inputs)
-                    raw_inputs = []            
-                    #update stats
-                    for upf_journey in upf_journeys:
-                        try:
-                            upf_journeys_queue.put_nowait(upf_journey)
-                            stats_published_upf_journeys = stats_published_upf_journeys + 1
-                        except queue.Full:
-                            # update stats
-                            stats_dropped_upf_journeys = stats_dropped_upf_journeys + 1
+
+                    upf_items_df = pd.DataFrame(upf_journeys)
+                    publish_list = []
+                    if len(upf_items_df) > 0:
+                        # Convert to numeric (force errors to NaN if needed)
+                        upf_items_df["st"] = pd.to_numeric(upf_items_df["st"], errors="coerce")
+                        upf_items_df["rt"] = pd.to_numeric(upf_items_df["rt"], errors="coerce")
+
+                        # Drop rows with NaN timestamps if necessary
+                        upf_items_df.dropna(subset=["st", "rt"], inplace=True)
+
+                        # Now safe to do floor division
+                        upf_items_df["st_sec"] = upf_items_df["st"] // 1_000_000_000
+                        upf_items_df["rt_sec"] = upf_items_df["rt"] // 1_000_000_000
+
+                        # Push to InfluxDB
+                        publish_list.append(
+                            { "df" : upf_items_df, "point_name": "upf", "time_key": "st_sec" }
+                        )
+                        stats_published_upf_journeys += len(upf_items_df)
+
+                    if publish_list:
+                        influx_cli.push_dataframe_list(publish_list, raw_bucket)
+                    
+                    publish_list = []
+                    upf_items_df = None
+                    raw_inputs = []
                     upf_journeys = []
 
             # print stats
@@ -686,13 +559,13 @@ def queue_process(
             elapsed_time = current_time - start_time
             if int(elapsed_time) >= LOGGING_PERIOD_SEC:
                 if client_name == 'UE':
-                    logger.info(f"[{client_name} queue process] received lines: {stats_rcv_lines}, dropped lines: {stats_dropped_lines}, published ue_ip_packets: {stats_published_ue_ip_packets}, dropped ue_ip_packets: {stats_dropped_ue_ip_packets}")
+                    logger.info(f"[{client_name} queue process] received lines: {stats_rcv_lines}, dropped lines: {stats_dropped_lines}, published ue_ip_packets: {stats_published_ue_ip_packets}")
                     start_time = current_time
                 elif client_name == 'GNB':
-                    logger.info(f"[{client_name} queue process] received lines: {stats_rcv_lines}, dropped lines: {stats_dropped_lines}, published gnb_ip_packets: {stats_published_gnb_ip_packets}, dropped gnb_ip_packets: {stats_dropped_gnb_ip_packets}")
+                    logger.info(f"[{client_name} queue process] received lines: {stats_rcv_lines}, dropped lines: {stats_dropped_lines}, published gnb_ip_packets: {stats_published_gnb_ip_packets}")
                     start_time = current_time
                 elif client_name == 'UPF':
-                    logger.info(f"[{client_name} queue process] received lines: {stats_rcv_lines}, dropped lines: {stats_dropped_lines}, published UPF journeys: {stats_published_upf_journeys}, dropped UPF journeys: {stats_dropped_upf_journeys}")
+                    logger.info(f"[{client_name} queue process] received lines: {stats_rcv_lines}, dropped lines: {stats_dropped_lines}, published UPF journeys: {stats_published_upf_journeys}")
                     start_time = current_time
 
         except Exception as ex:
@@ -800,11 +673,6 @@ def serve():
         # If the file doesn't exist, set token to None
         token = None
 
-    upf_rawdata_queue = Queue(MAX_L1_UPF_DEPTH)
-    upf_journeys_queue = Queue(MAX_L2_UPF_DEPTH)
-    gnb_rawdata_queue = None
-    ue_rawdata_queue = None
-    
     config = {
         "influx_token" : token,
         "UPF": {
@@ -823,24 +691,22 @@ def serve():
 
     gnb_rawdata_queue = Queue(MAX_L1_GNB_DEPTH)
     ue_rawdata_queue = Queue(MAX_L1_UE_DEPTH)
-    gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue = Queue(MAX_L2_GNB_DEPTH), Queue(MAX_L2_GNB_DEPTH), Queue(MAX_L2_GNB_DEPTH), Queue(MAX_L2_GNB_DEPTH)
-    ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue = Queue(MAX_L2_UE_DEPTH), Queue(MAX_L2_UE_DEPTH), Queue(MAX_L2_UE_DEPTH)
+    upf_rawdata_queue = Queue(MAX_L1_UPF_DEPTH)
 
     try:
         # UPF
         upf_server = Process(target=net_server, args=("UPF", config, upf_rawdata_queue),daemon=True)
-        upf_qprocess = Process(target=queue_process, args=("UPF", config, upf_rawdata_queue, None, None, None, None, None, None, None, upf_journeys_queue),daemon=True)
+        upf_qprocess = Process(target=queue_process, args=("UPF", config, upf_rawdata_queue),daemon=True)
 
         # GNB
         gnb_server = Process(target=net_server, args=("GNB", config, gnb_rawdata_queue),daemon=True)
-        gnb_qprocess = Process(target=queue_process, args=("GNB", config, gnb_rawdata_queue, None, None, None, gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue, None),daemon=True)
+        gnb_qprocess = Process(target=queue_process, args=("GNB", config, gnb_rawdata_queue),daemon=True)
 
         # UE
         ue_server = Process(target=net_server, args=("UE", config, ue_rawdata_queue),daemon=True)
-        ue_qprocess = Process(target=queue_process, args=("UE", config, ue_rawdata_queue, ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue, None, None, None, None, None),daemon=True)
+        ue_qprocess = Process(target=queue_process, args=("UE", config, ue_rawdata_queue),daemon=True)
 
         # COMBINE
-        raw_process = Process(target=process_raw_lines, args=(upf_journeys_queue, gnb_ip_packets_queue, gnb_rlc_segments_queue, gnb_mac_attempts_queue, gnb_mcs_reports_queue, ue_ip_packets_queue, ue_rlc_segments_queue, ue_mac_attempts_queue, config), daemon=True)
         decompose_process = Process(target=packets_decompose, args=(config,), daemon=True)
         
 
@@ -854,7 +720,6 @@ def serve():
         ue_server.start()
         ue_qprocess.start()
 
-        raw_process.start()
         decompose_process.start()
 
         # join
@@ -867,7 +732,6 @@ def serve():
         ue_server.join()
         ue_qprocess.join()
 
-        raw_process.join()
         decompose_process.join()
 
     except KeyboardInterrupt:
@@ -883,7 +747,6 @@ def serve():
         ue_server.terminate()
         ue_qprocess.terminate()
         
-        raw_process.terminate()
         decompose_process.terminate()
     else:
         logger.warning("Termination")
@@ -898,5 +761,4 @@ def serve():
         ue_server.terminate()
         ue_qprocess.terminate()
 
-        raw_process.terminate()
         decompose_process.terminate()

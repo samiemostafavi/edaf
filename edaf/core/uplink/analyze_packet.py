@@ -154,13 +154,38 @@ class ULPacketAnalyzer:
             sn = ue_rlc_srn
             logger.debug(f"The UE ipid found: {ip_id}")
 
-            # get the ue ip row
-            ue_ip_row = self.ue_ip_packets_df[self.ue_ip_packets_df['ip_id'] == ip_id].iloc[0]
-
             ue_rlc_rows = []
             for txpdu_id in txpdu_id_set:
                 ue_rlc_rows.append(self.ue_rlc_segments_df[self.ue_rlc_segments_df['txpdu_id'] == txpdu_id].iloc[0])
+            if len(ue_rlc_rows) == 0:
+                logger.error(f"No related ue rlc rows found for txpdu set: {txpdu_id_set}.")
+                continue
+            ue_rlc_row0 = ue_rlc_rows[0]
 
+            # get the ue ip row
+            result_df = self.ue_ip_packets_df[self.ue_ip_packets_df['ip_id'] == ip_id]
+            if result_df.shape[0] == 0:
+                logger.error(f"For UE SN {sn}, UE IP ID {ip_id} could not be found.")
+                continue
+            elif result_df.shape[0] >= 1:
+                logger.debug(f"Looking for the ue_ip_row with ip_id {ip_id}. Found {result_df.shape[0]} of them. We pick the closest but after the ue_rlc_row0.")
+                
+                min_time_diff = float('inf')
+                ue_ip_row = None
+                found = False
+
+                for k in range(result_df.shape[0]):
+                    pot_ue_ip_row = result_df.iloc[k]
+                    time_diff = ue_rlc_row0['rlc.txpdu.timestamp'] - pot_ue_ip_row['ip.in.timestamp']
+                    if time_diff > 0 and time_diff < min_time_diff:
+                        found = True
+                        min_time_diff = time_diff
+                        ue_ip_row = pot_ue_ip_row
+
+                if not found:
+                    logger.error(f"For UE SN {sn}, UE IP ID {ip_id} could not be found, the potential ones all had negative timeings.")
+                    continue
+            
             result_df = self.gnb_ip_packets_df[self.gnb_ip_packets_df['gtp.out.sn'] == ue_rlc_srn]
             if result_df.shape[0] == 0:
                 logger.error(f"UE SN {sn} for UE IP ID {ip_id} could not be found on GNB side. Dropped packet?")
@@ -179,10 +204,10 @@ class ULPacketAnalyzer:
                 logger.error(f"No related gnb txpdu ids found for UE ip_id:{ip_id} and sn:{ue_rlc_srn}")
                 continue
 
-            if (float(gnb_ip_row['gtp.out.timestamp']) - float(ue_ip_row['ip.in.timestamp'])) > 0.001:
-                print(gnb_ip_row)
-                print("---")
-                print(ue_ip_row)
+            #if (float(gnb_ip_row['gtp.out.timestamp']) - float(ue_ip_row['ip.in.timestamp'])) > 0.001:
+            #    print(gnb_ip_row)
+            #    print("---")
+            #    print(ue_ip_row)
 
             # start packet dict
             packet = {
