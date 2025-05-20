@@ -13,7 +13,7 @@ if not os.getenv('DEBUG'):
 # maximum number of lines to check
 MAX_DEPTH = 500
 
-def find_ip_packets(previous_lines : RingBuffer, lines):
+def find_ip_packets(previous_lines : RingBuffer, lines, silent = False):
 
     #lines = sorted(unsortedlines, key=sort_key, reverse=False)
     journeys = []
@@ -145,7 +145,8 @@ def find_ip_packets(previous_lines : RingBuffer, lines):
         
             journeys.append(flatten_dict(journey))
     
-    logger.info(f"Extracted {len(journeys)} ip packet deliveries on GNB.")
+    if not silent:
+        logger.info(f"Extracted {len(journeys)} ip packet deliveries on GNB.")
 
     # Convert the list of dicts to a DataFrame
     df = pd.DataFrame(journeys)

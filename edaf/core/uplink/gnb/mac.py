@@ -13,7 +13,7 @@ if not os.getenv('DEBUG'):
 # maximum number of lines to check
 MAX_DEPTH = 500
 
-def find_mac_successful_attempts(previous_lines : RingBuffer, lines):
+def find_mac_successful_attempts(previous_lines : RingBuffer, lines, silent = False):
 
     #lines = sorted(unsortedlines, key=sort_key, reverse=False)
     mac_attempts = []
@@ -170,14 +170,15 @@ def find_mac_successful_attempts(previous_lines : RingBuffer, lines):
 
             mac_attempts.append(flatten_dict(mac_dec_arr))
 
-    logger.info(f"Extracted {len(mac_attempts)} successful mac attempts on GNB.")
+    if not silent:
+        logger.info(f"Extracted {len(mac_attempts)} successful mac attempts on GNB.")
 
     # Convert the list of dicts to a DataFrame
     df = pd.DataFrame(mac_attempts)
     return df
 
 
-def find_mac_failed_attempts(previous_lines : RingBuffer, lines):
+def find_mac_failed_attempts(previous_lines : RingBuffer, lines, silent = False):
     
     #lines = sorted(unsortedlines, key=sort_key, reverse=False)
     mac_attempts = []
@@ -273,7 +274,8 @@ def find_mac_failed_attempts(previous_lines : RingBuffer, lines):
 
             mac_attempts.append(flatten_dict(mac_dec_arr))
 
-    logger.info(f"Extracted {len(mac_attempts)} failed mac attempts on GNB.")
+    if not silent:
+        logger.info(f"Extracted {len(mac_attempts)} failed mac attempts on GNB.")
 
     # Convert the list of dicts to a DataFrame
     df = pd.DataFrame(mac_attempts)

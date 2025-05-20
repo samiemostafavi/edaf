@@ -13,7 +13,7 @@ if not os.getenv('DEBUG'):
 # maximum number of lines to check
 MAX_DEPTH = 500
 
-def find_mac_attempts(previous_lines : RingBuffer, lines, mac_id_count):
+def find_mac_attempts(previous_lines : RingBuffer, lines, mac_id_count, silent = False):
     revlines = list(reversed(lines))
 
     #lines = sorted(unsortedlines, key=sort_key, reverse=False)
@@ -135,7 +135,8 @@ def find_mac_attempts(previous_lines : RingBuffer, lines, mac_id_count):
             mac_attempts.append(flatten_dict(mac_dec_arr))
             mac_id_count = mac_id_count + 1
 
-    logger.info(f"Extracted {len(mac_attempts)} mac attempts on UE.")
+    if not silent:
+        logger.info(f"Extracted {len(mac_attempts)} mac attempts on UE.")
 
     # Convert the list of dicts to a DataFrame
     df = pd.DataFrame(mac_attempts)

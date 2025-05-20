@@ -23,7 +23,7 @@ def was_observed_before(rlc_arr : list, test_line : str):
             break
     return found
 
-def find_rlc_segments(previous_lines : RingBuffer, lines, sdu_id_count):
+def find_rlc_segments(previous_lines : RingBuffer, lines, sdu_id_count, silent = False):
 
     #lines = sorted(unsortedlines, key=sort_key, reverse=False)
     rlc_reassemblies = []
@@ -121,13 +121,14 @@ def find_rlc_segments(previous_lines : RingBuffer, lines, sdu_id_count):
             rlc_reassemblies.append(flatten_dict(rlc_sdu))
             sdu_id_count = sdu_id_count + 1
 
-    logger.info(f"Extracted {len(rlc_reassemblies)} rlc segments on GNB.")
+    if not silent:
+        logger.info(f"Extracted {len(rlc_reassemblies)} rlc segments on GNB.")
 
     # Convert the list of dicts to a DataFrame
     df = pd.DataFrame(rlc_reassemblies)
     return df
 
-def find_rlc_reports(lines):
+def find_rlc_reports(lines, silent = False):
     #lines = sorted(unsortedlines, key=sort_key, reverse=False)
     rlc_reports = {} # a hash table with report number as the key
     for line_number, line in enumerate(lines): 
@@ -205,7 +206,8 @@ def find_rlc_reports(lines):
                     rlc_reports[num_value] = {}
                 rlc_reports[num_value]['ack'] = rlc_ack_dict
     if rlc_reports:
-        logger.info(f"Extracted {max(rlc_reports.keys())} rlc reports.")
+        if not silent:
+            logger.info(f"Extracted {max(rlc_reports.keys())} rlc reports.")
     else:
         return pd.DataFrame([])
     

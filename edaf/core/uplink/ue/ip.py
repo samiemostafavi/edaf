@@ -13,7 +13,7 @@ if not os.getenv('DEBUG'):
 
 PRIOR_LINES_NUM = 20
 
-def find_ip_packets(previous_lines : RingBuffer, lines, ip_id_count):
+def find_ip_packets(previous_lines : RingBuffer, lines, ip_id_count, silent = False):
     # we sort in the rdt process instead
     #lines = sorted(unsortedlines, key=sort_key, reverse=False)
 
@@ -208,8 +208,9 @@ def find_ip_packets(previous_lines : RingBuffer, lines, ip_id_count):
 
             journeys.append(flatten_dict(journey))
             ip_id_count = ip_id_count + 1
-        
-    logger.info(f"Extracted {len(journeys)} ip packet deliveries on UE.")
+            
+    if not silent:
+        logger.info(f"Extracted {len(journeys)} ip packet deliveries on UE.")
 
     # Convert the list of dicts to a DataFrame
     df = pd.DataFrame(journeys)

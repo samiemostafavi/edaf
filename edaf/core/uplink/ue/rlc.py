@@ -15,7 +15,7 @@ if not os.getenv('DEBUG'):
 # even when the packet enters the system
 PRIOR_LINES_NUM = 50
 
-def find_rlc_segments(previous_lines : RingBuffer, lines, txpdu_id_count):
+def find_rlc_segments(previous_lines : RingBuffer, lines, txpdu_id_count, silent = False):
     # we sort in the rdt process instead
     #lines = sorted(unsortedlines, key=sort_key, reverse=False)
 
@@ -261,7 +261,8 @@ def find_rlc_segments(previous_lines : RingBuffer, lines, txpdu_id_count):
             txpdus.append(flatten_dict(txpdu_report))
             txpdu_id_count = txpdu_id_count + 1
 
-    logger.info(f"Extracted {len(txpdus)} rlc txpdus on UE.")
+    if not silent:
+        logger.info(f"Extracted {len(txpdus)} rlc txpdus on UE.")
 
     # Convert the list of dicts to a DataFrame
     df = pd.DataFrame(txpdus)

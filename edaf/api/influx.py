@@ -4,6 +4,8 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 from loguru import logger
 import math, re, numbers
 from decimal import Decimal
+from collections import deque
+import time
 
 def is_duration_string(value):
     if not isinstance(value, str):

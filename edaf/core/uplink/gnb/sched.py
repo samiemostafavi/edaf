@@ -13,7 +13,7 @@ if not os.getenv('DEBUG'):
 # maximum number of lines to check
 MAX_DEPTH = 500
 
-def find_sched_events(previous_lines : RingBuffer, lines):   
+def find_sched_events(previous_lines : RingBuffer, lines, silent = False):   
 
     #lines = sorted(unsortedlines, key=sort_key, reverse=False)
     sched_reports = []
@@ -184,14 +184,15 @@ def find_sched_events(previous_lines : RingBuffer, lines):
 
             sched_reports.append(flatten_dict(sched_report))
     
-    logger.info(f"Extracted {len(sched_reports)} schedulling reports on GNB.")
+    if not silent:
+        logger.info(f"Extracted {len(sched_reports)} schedulling reports on GNB.")
     #Convert the list of dicts to a DataFrame
     df = pd.DataFrame(sched_reports)
     return df
     
 
 
-def find_sched_maps(previous_lines : RingBuffer, lines):   
+def find_sched_maps(previous_lines : RingBuffer, lines, silent = False):   
 
     #lines = sorted(unsortedlines, key=sort_key, reverse=False)
     sched_maps = []
@@ -290,14 +291,15 @@ def find_sched_maps(previous_lines : RingBuffer, lines):
 
             sched_maps.append(flatten_dict(sched_map))
     
-    logger.info(f"Extracted {len(sched_maps)} schedulling maps on GNB.")
+    if not silent:
+        logger.info(f"Extracted {len(sched_maps)} schedulling maps on GNB.")
     #Convert the list of dicts to a DataFrame
     df = pd.DataFrame(sched_maps)
     return df
     
 
 
-def find_mcs_reports(lines):
+def find_mcs_reports(lines, silent = False):
 
     #lines = sorted(unsortedlines, key=sort_key, reverse=False)
     mcs_reports = []
@@ -338,7 +340,8 @@ def find_mcs_reports(lines):
             mcs_reports.append(flatten_dict(mcs_rep))
             logger.debug(f"[GNB] Found '{MCS_REP_STR}' in line {line_number}, {mcs_rep}")
 
-    logger.info(f"Extracted {len(mcs_reports)} UL mcs assignments on GNB.")
+    if not silent:
+        logger.info(f"Extracted {len(mcs_reports)} UL mcs assignments on GNB.")
     #Convert the list of dicts to a DataFrame
     df = pd.DataFrame(mcs_reports)
     return df

@@ -157,7 +157,7 @@ def flatten_decomposed_packets(decomposed_packets_list: list):
                 'ip.len': dec_packet.get('len'),
                 'ip.in_t': dec_packet.get('ip.in_t'),
                 'ip.out_t': dec_packet.get('ip.out_t'),
-                # #FIXME: gtp.out.timestamp (ip.out_t) is sometimes gives a very large offset: 450ms later than rlc out which is wrong
+                # #FIXME: gtp.out.timestamp (ip.out_t) sometimes gives a very large offset: 450ms later than rlc out which is wrong
                 # for now, we should use rlc.out_t
                 'rlc.in_t': dec_packet.get('rlc.in_t'),
                 'rlc.out_t': dec_packet.get('rlc.out_t'),
@@ -369,11 +369,7 @@ def packets_decompose(config):
                 flat_decomposed_packets_list = flatten_decomposed_packets(decomposed_packets_list)
                 analyzed_packets_df = pd.DataFrame(flat_decomposed_packets_list)
 
-                print(analyzed_packets_df)
-                print("------------------")
-                for _, row in analyzed_packets_df[analyzed_packets_df['e2e_delay'] > 100].iterrows():
-                    print(row.to_dict())
-                print("------------------")
+                logger.debug(f"{analyzed_packets_df}")
 
                 if analyzed_packets_df is not None:
                     stats_decomposed_packets += len(analyzed_packets_df)
@@ -452,7 +448,8 @@ def queue_process(
             enable_rlc_segments = True,
             enable_mac_attempts = True,
             enable_uldcis_reports = False,
-            enable_sched_reports = False
+            enable_sched_reports = False,
+            silent = True
         )
     elif client_name == 'GNB':
         if (rawdata_queue is None):
@@ -466,7 +463,8 @@ def queue_process(
             enable_sched_maps = False,
             enable_rlc_reports = False,
             enable_mac_attempts = True,
-            enable_mcs_reports = True
+            enable_mcs_reports = True,
+            silent = True
         )
     elif client_name == 'UPF':
         if (rawdata_queue is None):

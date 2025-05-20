@@ -211,8 +211,6 @@ class ULPacketAnalyzer:
                 'len' : int(ue_ip_row['ip.in.length']),
                 'ip.in_t' : float(ue_ip_row['ip.in.timestamp']),
                 'ip.out_t' : float(gnb_ip_row['gtp.out.timestamp']),  
-                # #FIXME: gtp.out.timestamp is sometimes gives a very large offset: 450ms later than rlc out which is wrong
-                # for now, we should use rlc.out_t
                 'rlc.in_t' : float(ue_ip_row['rlc.queue.timestamp']),
                 'rlc.out_t' : None,
                 'backlog' : int(ue_ip_row['rlc.queue.queue']),

@@ -9,7 +9,7 @@ if not os.getenv('DEBUG'):
     logger.add(sys.stdout, level="INFO")
 
 
-def find_uldci_reports(lines):
+def find_uldci_reports(lines, silent = False):
 
     uldcis = []
     for line_number, line in enumerate(lines):
@@ -60,7 +60,8 @@ def find_uldci_reports(lines):
             logger.debug(f"[UE] Found '{ULDCI_str}' in line {line_number},{uldci_dict}")
             uldcis.append(uldci_dict)
 
-    logger.info(f"Extracted {len(uldcis)} uldcis on UE.")
+    if not silent:
+        logger.info(f"Extracted {len(uldcis)} uldcis on UE.")
 
     # Convert the list of dicts to a DataFrame
     df = pd.DataFrame(uldcis)
@@ -68,7 +69,7 @@ def find_uldci_reports(lines):
 
 
 
-def find_sched_reports(lines):
+def find_sched_reports(lines, silent = False):
 
     bsrupds = []
     bsrtxs = []
@@ -210,7 +211,8 @@ def find_sched_reports(lines):
             }
             srtrigs.append(srtrig_dict)
 
-    logger.info(f"Extracted {len(bsrupds)} BSR updates, {len(bsrtxs)} BSR txs, {len(srtrigs)} SR triggers, {len(srtxs)} SR txs on UE.")
+    if not silent:
+        logger.info(f"Extracted {len(bsrupds)} BSR updates, {len(bsrtxs)} BSR txs, {len(srtrigs)} SR triggers, {len(srtxs)} SR txs on UE.")
 
     # Convert the list of dicts to a DataFrame
     return pd.DataFrame(bsrupds), pd.DataFrame(bsrtxs), pd.DataFrame(srtrigs), pd.DataFrame(srtxs)        
