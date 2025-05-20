@@ -13,7 +13,6 @@ from edaf.api.influx import InfluxClient
 
 MAX_L1_UPF_DEPTH = 5000 # lines
 MAX_L2_UPF_DEPTH = 500 # journeys
-JOURNEYS_THRESHOLD_UPF = 20
 
 MAX_L1_GNB_DEPTH = 5000 # lines
 MAX_L2_GNB_DEPTH = 500 # journeys
@@ -27,10 +26,10 @@ JOURNEYS_THRESHOLD_UE = 20
 
 LOGGING_PERIOD_SEC = 2
 
-PACKETS_DECOMPOSE_WINDOW_S = 5 # history window duration in seconds
-PACKETS_DECOMPOSE_SLEEP_S = 1 # while loop sleep duration in seconds
+PACKETS_DECOMPOSE_WINDOW_MS = 1000 # history window duration in seconds
+PACKETS_DECOMPOSE_SLEEP_S = 0.1 # while loop sleep duration in seconds
+
 PROCESS_RAW_SLEEP_S = 1 # while loop sleep duration in seconds
-MIN_NUM_PACKETS_TO_ANALYZE = 200
 
 org = "expeca"
 raw_bucket = "edaf_raw"
@@ -67,14 +66,15 @@ def decompose_packet_delays(flat_packet, complete_packet):
     if not rlc_attempts:
         return delays
 
+    rlc0 = rlc_attempts[0]
+    rlcN = rlc_attempts[-1]
+
     # Segmentation delay
     try:
-        rlcN = rlc_attempts[-1]
         delays["segmentation_delay"] = (rlcN['mac.out_t'] - rlc0['mac.out_t'])*1000
     except:
         pass
 
-    rlc0 = complete_packet["rlc.attempts"][0]
     rlc0_mac_attempts = rlc0.get("mac.attempts",[])
     if not rlc0_mac_attempts:
         return delays
@@ -105,9 +105,9 @@ def decompose_packet_delays(flat_packet, complete_packet):
     # MAC retransmission delay
     try:
         if flat_packet['mac.num_total_retx'] > 0:
-            delays["mac_retransmission_delay"] = (rlc_max_mac_attempts[-1]["phy.out_t"] - rlc_max_mac_attempts[0]["phy.decode_t"])*1000
+            delays["retransmission_delay"] = (rlc_max_mac_attempts[-1]["phy.out_t"] - rlc_max_mac_attempts[0]["phy.decode_t"])*1000
         else:
-            delays["mac_retransmission_delay"] = 0.0
+            delays["retransmission_delay"] = 0.0
     except:
         pass
 
@@ -124,7 +124,7 @@ def flatten_decomposed_packets(decomposed_packets_list: list):
             # If rlc_attempts is None or empty, set all dependent metrics to None
             res_flat_packet = {
                 'sn': dec_packet.get('sn'),
-                'ip.len': dec_packet.get('ip.len'),
+                'ip.len': dec_packet.get('len'),
                 'ip.in_t': dec_packet.get('ip.in_t'),
                 'ip.out_t': dec_packet.get('ip.out_t'),
                 'rlc.in_t': dec_packet.get('rlc.in_t'),
@@ -243,7 +243,7 @@ def packets_decompose(config):
             upf_items_df, gnb_ip_items_df, gnb_rlc_items_df, gnb_mac_items_df, gnb_mcs_items_df, ue_ip_items_df, ue_rlc_items_df, ue_mac_items_df = None, None, None, None, None, None, None, None
 
             # fetch all the data from the last few seconds
-            recent_data = influx_cli.fetch_recent_data(raw_bucket, PACKETS_DECOMPOSE_WINDOW_S)
+            recent_data = influx_cli.fetch_recent_data(raw_bucket, PACKETS_DECOMPOSE_WINDOW_MS)
             for item in recent_data:
                 # item is a dict with "df", "point_name", and "time_key"
                 # let's recreate the dataframes:
@@ -370,7 +370,7 @@ def packets_decompose(config):
                 if ue_rlc_items_df is None: missing.append("ue_rlc")
                 if ue_mac_items_df is None: missing.append("ue_mac")
 
-                logger.warning(f"[packets_decompose] For full decomposition, dataframes {missing} are not available.")
+                logger.debug(f"[packets_decompose] For full decomposition, dataframes {missing} are not available.")
 
         except Exception as ex:
             logger.error(f"[packets_decompose] {ex}")

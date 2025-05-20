@@ -106,10 +106,9 @@ class InfluxClient:
         if points:
             self.write_api.write(bucket, self.org, points)
 
-    def fetch_recent_data(self, bucket, duration_seconds):
+    def fetch_recent_data(self, bucket : str, duration_ms : int):
         # Ensure the duration is formatted as a float string with 's' suffix
-        duration_str = f"{duration_seconds:.9f}".rstrip("0").rstrip(".") + "s"
-
+        duration_str = f"{duration_ms}" + "ms"
         query = f'''
         from(bucket: "{bucket}")
             |> range(start: -{duration_str})
