@@ -572,7 +572,6 @@ def queue_process(
 
                 elif client_name == 'UPF':
                     upf_journeys = process_ul_nlmt(raw_inputs)
-
                     upf_items_df = pd.DataFrame(upf_journeys)
                     publish_list = []
                     if len(upf_items_df) > 0:
@@ -583,9 +582,9 @@ def queue_process(
                         # Drop rows with NaN timestamps if necessary
                         upf_items_df.dropna(subset=["st", "rt"], inplace=True)
 
-                        # Now safe to do floor division
-                        upf_items_df["st_sec"] = upf_items_df["st"] // 1_000_000_000
-                        upf_items_df["rt_sec"] = upf_items_df["rt"] // 1_000_000_000
+                        # Convert from ns to float seconds
+                        upf_items_df["st_sec"] = upf_items_df["st"] / 1_000_000_000
+                        upf_items_df["rt_sec"] = upf_items_df["rt"] / 1_000_000_000
 
                         # Push to InfluxDB
                         publish_list.append(
@@ -736,15 +735,12 @@ def serve():
     }
     manager = Manager()
 
-    #gnb_rawdata_queue = Queue(MAX_L1_GNB_DEPTH)
     gnb_rawdata_queue = SharedRingBuffer(size=MAX_L1_GNB_DEPTH, manager=manager)
     gnb_sline_queue = SharedRingBuffer(size=2, manager=manager)
 
-    #ue_rawdata_queue = Queue(MAX_L1_UE_DEPTH)
     ue_rawdata_queue = SharedRingBuffer(size=MAX_L1_UE_DEPTH, manager=manager)
     ue_sline_queue = SharedRingBuffer(size=2, manager=manager)
 
-    #upf_rawdata_queue = Queue(MAX_L1_UPF_DEPTH)
     upf_rawdata_queue = SharedRingBuffer(size=MAX_L1_UPF_DEPTH, manager=manager)
 
     try:
