@@ -104,7 +104,11 @@ class InfluxClient:
                             continue
 
                 #ns_time = int(float(row[time_key]) * 1e9)
-                ns_time = int(Decimal(str(row[time_key])) * Decimal('1e9'))
+                try:
+                    ns_time = int(Decimal(str(row[time_key])) * Decimal('1e9'))
+                except (ValueError, TypeError):
+                    logger.warning(f"[influx client] Non numeric value on the time field {point_name}, {time_key}: {row[time_key]}")
+                    continue
                 point = point.time(ns_time, WritePrecision.NS)
                 points.append(point)
 
