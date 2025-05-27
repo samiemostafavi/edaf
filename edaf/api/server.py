@@ -385,7 +385,7 @@ def packets_decompose(config):
                     #print(ue_iprlc_rel_df)
                     continue
 
-                packet_analyzer = ULPacketAnalyzer(upf_items_df, gnb_ip_items_df, gnb_rlc_items_df, gnb_iprlc_rel_df, gnb_mac_items_df, gnb_mcs_items_df, ue_ip_items_df, ue_rlc_items_df, ue_mac_items_df, ue_iprlc_rel_df)
+                packet_analyzer = ULPacketAnalyzer(db_addr=None, nlmt_df=upf_items_df, gnb_ip_packets_df=gnb_ip_items_df, gnb_rlc_segments_df=gnb_rlc_items_df, gnb_iprlc_rel_df=gnb_iprlc_rel_df, gnb_mac_attempts_df=gnb_mac_items_df, gnb_mcs_reports_df=gnb_mcs_items_df, ue_ip_packets_df=ue_ip_items_df, ue_rlc_segments_df=ue_rlc_items_df, ue_mac_attempts_df=ue_mac_items_df, ue_iprlc_rel_df=ue_iprlc_rel_df)
                 ue_srns_arr = list(range(int(packet_analyzer.first_rlcsrn), int(packet_analyzer.last_rlcsrn)))
                 decomposed_packets_list = packet_analyzer.figure_packettx_from_ue_rlc_srn(ue_srns_arr, silent = True)
 
