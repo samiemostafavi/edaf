@@ -3,8 +3,10 @@
 # Cleanup on Ctrl-C
 cleanup() {
   echo "[Info] Caught Ctrl-C. Cleaning up..."
-  [[ -n "$client_pid" ]] && kill "$client_pid" 2>/dev/null
+  [[ -n "$client_pid" ]] && kill -9 "$client_pid" 2>/dev/null
+  [[ -n "$tail_pid" ]] && kill -9 "$tail_pid" 2>/dev/null
   wait "$client_pid" 2>/dev/null
+  wait "$tail_pid" 2>/dev/null
   exit 0
 }
 
@@ -25,27 +27,40 @@ while true; do
 
   echo "[Info] Starting nlmt client..."
 
-  # Step 2: Start nlmt client in background, capture output
+  # Step 2: Start nlmt client in background and capture output
   log_file="/tmp/nlmt_$(date +%s).log"
-  ./nlmt client --tripm=oneway -i 50ms  -g edaf1/test -l 100 -m 1 -d 10s -o d --outdir=/tmp/ 192.168.70.129 2>&1 | tee "$log_file" &
+  rm -f "$log_file"
+  touch "$log_file"
+
+  ./nlmt client --tripm=oneway -i 50ms -g edaf1/test -l 100 -m 1 -d 20s -o d --outdir=/tmp/ 192.168.70.129 \
+    >> "$log_file" 2>&1 &
   client_pid=$!
 
-  # Wait up to 3 seconds for "[Connected]" in the output
+  tail -f "$log_file" &
+  tail_pid=$!
+
+  # Wait up to 3 seconds for "[Connected]"
   for i in {1..3}; do
     sleep 1
     if grep -q "\[Connected\]" "$log_file"; then
-      echo "[Info] nlmt connected. Letting it run."
-      wait $client_pid
+      echo "[Info] nlmt connected. Letting it run for 10 seconds..."
       break
     fi
   done
 
-  # If not connected, kill the client and retry
   if ! grep -q "\[Connected\]" "$log_file"; then
-    echo "[Warn] nlmt did not connect in time. Killing and retrying..."
-    kill $client_pid 2>/dev/null
-    wait $client_pid 2>/dev/null
+    echo "[Warn] nlmt did not connect in time. Force killing and retrying..."
+    kill -9 "$client_pid" "$tail_pid" 2>/dev/null
+    wait "$client_pid" "$tail_pid" 2>/dev/null
+    sleep 1
+    continue
   fi
+
+  # Let it run for exactly 10 seconds
+  sleep 10
+  echo "[Info] 10s finished. Force killing nlmt client..."
+  kill -9 "$client_pid" "$tail_pid" 2>/dev/null
+  wait "$client_pid" "$tail_pid" 2>/dev/null
 
   sleep 1
 done
