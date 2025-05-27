@@ -51,14 +51,41 @@ def preprocess_ul(
     nlmt_df.to_sql('nlmt_ip_packets', sqlite_conn, if_exists='replace', index=False)
 
     # GNB
-    gnb_ip_packets_df.to_sql('gnb_ip_packets', sqlite_conn, if_exists='replace', index=False)
-    gnb_rlc_segments_df.to_sql('gnb_rlc_segments', sqlite_conn, if_exists='replace', index=False)
-    gnb_sched_reports_df.to_sql('gnb_sched_reports', sqlite_conn, if_exists='replace', index=False)
-    gnb_sched_maps_df.to_sql('gnb_sched_maps', sqlite_conn, if_exists='replace', index=False)
-    gnb_rlc_reports_df.to_sql('gnb_rlc_reports', sqlite_conn, if_exists='replace', index=False)
-    gnb_mac_attempts_df.to_sql('gnb_mac_attempts', sqlite_conn, if_exists='replace', index=False)
-    gnb_mcs_reports_df.to_sql('gnb_mcs_reports', sqlite_conn, if_exists='replace', index=False)
-
+    if gnb_ip_packets_df is not None and not gnb_ip_packets_df.empty:
+        gnb_ip_packets_df.to_sql('gnb_ip_packets', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("gnb_ip_packets_df is None or empty. Skipping to_sql.")
+        
+    if gnb_rlc_segments_df is not None and not gnb_rlc_segments_df.empty:
+        gnb_rlc_segments_df.to_sql('gnb_rlc_segments', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("gnb_rlc_segments_df is None or empty. Skipping to_sql.")
+        
+    if gnb_sched_reports_df is not None and not gnb_sched_reports_df.empty:
+        gnb_sched_reports_df.to_sql('gnb_sched_reports', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("gnb_sched_reports_df is None or empty. Skipping to_sql.")
+        
+    if gnb_sched_maps_df is not None and not gnb_sched_maps_df.empty:
+        gnb_sched_maps_df.to_sql('gnb_sched_maps', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("gnb_sched_maps_df is None or empty. Skipping to_sql.")
+        
+    if gnb_rlc_reports_df is not None and not gnb_rlc_reports_df.empty:
+        gnb_rlc_reports_df.to_sql('gnb_rlc_reports', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("gnb_rlc_reports_df is None or empty. Skipping to_sql.")
+        
+    if gnb_mac_attempts_df is not None and not gnb_mac_attempts_df.empty:
+        gnb_mac_attempts_df.to_sql('gnb_mac_attempts', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("gnb_mac_attempts_df is None or empty. Skipping to_sql.")
+        
+    if gnb_mcs_reports_df is not None and not gnb_mcs_reports_df.empty:
+        gnb_mcs_reports_df.to_sql('gnb_mcs_reports', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("gnb_mcs_reports_df is None or empty. Skipping to_sql.")
+        
     # Create gnb databases relationship
     # For each 'gtp.out.sn' in gnb_ip_packets_df, find corresponding 'sdu_id' entries in gnb_rlc_segments_df
     gnb_iprlc_rel_df = pd.merge(gnb_ip_packets_df[['gtp.out.sn']],
@@ -68,15 +95,46 @@ def preprocess_ul(
     gnb_iprlc_rel_df.to_sql('gnb_iprlc_rel', sqlite_conn, if_exists='replace', index=False)
 
     # UE
-    ue_ip_packets_df.to_sql('ue_ip_packets', sqlite_conn, if_exists='replace', index=False)
-    ue_rlc_segments_df.to_sql('ue_rlc_segments', sqlite_conn, if_exists='replace', index=False)
-    ue_mac_attempts_df.to_sql('ue_mac_attempts', sqlite_conn, if_exists='replace', index=False)
-    ue_uldcis_df.to_sql('ue_uldcis', sqlite_conn, if_exists='replace', index=False)
-    ue_bsrupds_df.to_sql('ue_bsrupds', sqlite_conn, if_exists='replace', index=False)
-    ue_bsrtxs_df.to_sql('ue_bsrtxs', sqlite_conn, if_exists='replace', index=False)
-    ue_srtrigs_df.to_sql('ue_srtrigs', sqlite_conn, if_exists='replace', index=False)
-    ue_srtxs_df.to_sql('ue_srtxs', sqlite_conn, if_exists='replace', index=False)
-
+    if ue_ip_packets_df is not None and not ue_ip_packets_df.empty:
+        ue_ip_packets_df.to_sql('ue_ip_packets', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("ue_ip_packets_df is None or empty. Skipping to_sql.")
+        
+    if ue_rlc_segments_df is not None and not ue_rlc_segments_df.empty:
+        ue_rlc_segments_df.to_sql('ue_rlc_segments', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("gnb_ip_packets_df is None or empty. Skipping to_sql.")
+        
+    if ue_mac_attempts_df is not None and not ue_mac_attempts_df.empty:
+        ue_mac_attempts_df.to_sql('ue_mac_attempts', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("ue_mac_attempts_df is None or empty. Skipping to_sql.")
+        
+    if ue_uldcis_df is not None and not ue_uldcis_df.empty:
+        ue_uldcis_df.to_sql('ue_uldcis', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("ue_uldcis_df is None or empty. Skipping to_sql.")
+        
+    if ue_bsrupds_df is not None and not ue_bsrupds_df.empty:
+        ue_bsrupds_df.to_sql('ue_bsrupds', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("ue_bsrupds_df is None or empty. Skipping to_sql.")
+        
+    if ue_bsrtxs_df is not None and not ue_bsrtxs_df.empty:
+        ue_bsrtxs_df.to_sql('ue_bsrtxs', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("ue_bsrtxs_df is None or empty. Skipping to_sql.")
+        
+    if ue_srtrigs_df is not None and not ue_srtrigs_df.empty:
+        ue_srtrigs_df.to_sql('ue_srtrigs', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("ue_srtrigs_df is None or empty. Skipping to_sql.")
+        
+    if ue_srtxs_df is not None and not ue_srtxs_df.empty:
+        ue_srtxs_df.to_sql('ue_srtxs', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("ue_srtxs_df is None or empty. Skipping to_sql.")
+        
     # For each pair of ['rlc.queue.R2buf', 'rlc.queue.sn'] in ue_ip_packets_df,
     # find corresponding entries in ue_rlc_segments_df with the same values for ['rlc.txpdu.R2buf', 'rlc.txpdu.sn']
     ue_iprlc_rel_df = pd.merge(ue_ip_packets_df[['rlc.queue.R2buf', 'rlc.queue.sn',  'ip_id']],
