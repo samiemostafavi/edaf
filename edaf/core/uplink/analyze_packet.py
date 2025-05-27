@@ -8,96 +8,104 @@ if not os.getenv('DEBUG'):
     logger.add(sys.stdout, level="INFO")
 
 class ULPacketAnalyzer:
-    def __init__(self, db_addr):
-        # Open a connection to the SQLite database
-        conn = sqlite3.connect(db_addr)
-
-        # Read each table from the SQLite database into pandas DataFrames
-
-        self.nlmt_df = pd.read_sql('SELECT * FROM nlmt_ip_packets', conn)
-        logger.debug(f"nlmt_df: {self.nlmt_df.columns.tolist()}")
-
-        self.gnb_mcs_reports_df = pd.read_sql('SELECT * FROM gnb_mcs_reports', conn)
-        logger.debug(f"gnb_mcs_reports_df: {self.gnb_mcs_reports_df.columns.tolist()}")
-
-        self.gnb_ip_packets_df = pd.read_sql('SELECT * FROM gnb_ip_packets', conn)
-        logger.debug(f"gnb_ip_packets_df: {self.gnb_ip_packets_df.columns.tolist()}")
-
-        self.gnb_rlc_segments_df = pd.read_sql('SELECT * FROM gnb_rlc_segments', conn)
-        logger.debug(f"gnb_rlc_segments_df: {self.gnb_rlc_segments_df.columns.tolist()}")
-
-        self.gnb_iprlc_rel_df = pd.read_sql('SELECT * FROM gnb_iprlc_rel', conn)
-        logger.debug(f"gnb_iprlc_rel_df: {self.gnb_iprlc_rel_df.columns.tolist()}")
-
-        self.gnb_mac_attempts_df = pd.read_sql('SELECT * FROM gnb_mac_attempts', conn)
-        logger.debug(f"gnb_mac_attempts_df: {self.gnb_mac_attempts_df.columns.tolist()}")
-
-        self.ue_ip_packets_df = pd.read_sql('SELECT * FROM ue_ip_packets', conn)
-        logger.debug(f"ue_ip_packets_df: {self.ue_ip_packets_df.columns.tolist()}")
-
-        self.ue_rlc_segments_df = pd.read_sql('SELECT * FROM ue_rlc_segments', conn)
-        logger.debug(f"ue_rlc_segments_df: {self.ue_rlc_segments_df.columns.tolist()}")
-
-        self.ue_mac_attempts_df = pd.read_sql('SELECT * FROM ue_mac_attempts', conn)
-        logger.debug(f"ue_mac_attempts_df: {self.ue_mac_attempts_df.columns.tolist()}")
-
-        self.ue_iprlc_rel_df = pd.read_sql('SELECT * FROM ue_iprlc_rel', conn)
-        logger.debug(f"ue_iprlc_rel_df: {self.ue_iprlc_rel_df.columns.tolist()}")
-
-        logger.info(f"Database '{db_addr}' imported successfully.")
-
-        conn.close()
-
-        # check and report the first and last ue ip ids
-        self.first_ueipid = self.ue_ip_packets_df['ip_id'].min()
-        self.last_ueipid = self.ue_ip_packets_df['ip_id'].max()
-
-        # check and report the first and last rlc.txpdu.srn
-        self.first_rlcsrn = self.ue_rlc_segments_df["rlc.txpdu.srn"].min()
-        self.last_rlcsrn = self.ue_rlc_segments_df["rlc.txpdu.srn"].max()
-
-        # check and report the first and last gnb sns
-        self.first_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].min()
-        self.last_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].max()
-        # check and report the first and last timestamps
-        self.first_ueip_ts = self.ue_ip_packets_df['ip.in.timestamp'].min()
-        self.last_ueip_ts = self.ue_ip_packets_df['ip.in.timestamp'].max()
+    def __init__(self, db_addr=None, 
+                 nlmt_df=None, gnb_ip_packets_df=None, gnb_rlc_segments_df=None,
+                 gnb_iprlc_rel_df=None, gnb_mac_attempts_df=None, gnb_mcs_reports_df=None,
+                 ue_ip_packets_df=None, ue_rlc_segments_df=None,
+                 ue_mac_attempts_df=None, ue_iprlc_rel_df=None):
 
 
-        # check and report the ue_ip_ids and gnb sns
-        logger.success(f"Imported database '{db_addr}', with UE IDs ranging from {self.ue_ip_packets_df['ip_id'].min()} to {self.ue_ip_packets_df['ip_id'].max()}, and GNB SNs ranging from {self.gnb_ip_packets_df['gtp.out.sn'].min()} to {self.gnb_ip_packets_df['gtp.out.sn'].max()}")
+        if db_addr is not None:
+            
+            # Open a connection to the SQLite database
+            conn = sqlite3.connect(db_addr)
+    
+            # Read each table from the SQLite database into pandas DataFrames
+    
+            self.nlmt_df = pd.read_sql('SELECT * FROM nlmt_ip_packets', conn)
+            logger.debug(f"nlmt_df: {self.nlmt_df.columns.tolist()}")
+    
+            self.gnb_mcs_reports_df = pd.read_sql('SELECT * FROM gnb_mcs_reports', conn)
+            logger.debug(f"gnb_mcs_reports_df: {self.gnb_mcs_reports_df.columns.tolist()}")
+    
+            self.gnb_ip_packets_df = pd.read_sql('SELECT * FROM gnb_ip_packets', conn)
+            logger.debug(f"gnb_ip_packets_df: {self.gnb_ip_packets_df.columns.tolist()}")
+    
+            self.gnb_rlc_segments_df = pd.read_sql('SELECT * FROM gnb_rlc_segments', conn)
+            logger.debug(f"gnb_rlc_segments_df: {self.gnb_rlc_segments_df.columns.tolist()}")
+    
+            self.gnb_iprlc_rel_df = pd.read_sql('SELECT * FROM gnb_iprlc_rel', conn)
+            logger.debug(f"gnb_iprlc_rel_df: {self.gnb_iprlc_rel_df.columns.tolist()}")
+    
+            self.gnb_mac_attempts_df = pd.read_sql('SELECT * FROM gnb_mac_attempts', conn)
+            logger.debug(f"gnb_mac_attempts_df: {self.gnb_mac_attempts_df.columns.tolist()}")
+    
+            self.ue_ip_packets_df = pd.read_sql('SELECT * FROM ue_ip_packets', conn)
+            logger.debug(f"ue_ip_packets_df: {self.ue_ip_packets_df.columns.tolist()}")
+    
+            self.ue_rlc_segments_df = pd.read_sql('SELECT * FROM ue_rlc_segments', conn)
+            logger.debug(f"ue_rlc_segments_df: {self.ue_rlc_segments_df.columns.tolist()}")
+    
+            self.ue_mac_attempts_df = pd.read_sql('SELECT * FROM ue_mac_attempts', conn)
+            logger.debug(f"ue_mac_attempts_df: {self.ue_mac_attempts_df.columns.tolist()}")
+    
+            self.ue_iprlc_rel_df = pd.read_sql('SELECT * FROM ue_iprlc_rel', conn)
+            logger.debug(f"ue_iprlc_rel_df: {self.ue_iprlc_rel_df.columns.tolist()}")
+    
+            logger.info(f"Database '{db_addr}' imported successfully.")
+    
+            conn.close()
+    
+            # check and report the first and last ue ip ids
+            self.first_ueipid = self.ue_ip_packets_df['ip_id'].min()
+            self.last_ueipid = self.ue_ip_packets_df['ip_id'].max()
+    
+            # check and report the first and last rlc.txpdu.srn
+            self.first_rlcsrn = self.ue_rlc_segments_df["rlc.txpdu.srn"].min()
+            self.last_rlcsrn = self.ue_rlc_segments_df["rlc.txpdu.srn"].max()
+    
+            # check and report the first and last gnb sns
+            self.first_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].min()
+            self.last_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].max()
+            # check and report the first and last timestamps
+            self.first_ueip_ts = self.ue_ip_packets_df['ip.in.timestamp'].min()
+            self.last_ueip_ts = self.ue_ip_packets_df['ip.in.timestamp'].max()
+    
+            # check and report the ue_ip_ids and gnb sns
+            logger.success(f"Imported database '{db_addr}', with UE IDs ranging from {self.ue_ip_packets_df['ip_id'].min()} to {self.ue_ip_packets_df['ip_id'].max()}, and GNB SNs ranging from {self.gnb_ip_packets_df['gtp.out.sn'].min()} to {self.gnb_ip_packets_df['gtp.out.sn'].max()}")
 
-    def __init__(self, nlmt_df, gnb_ip_packets_df, gnb_rlc_segments_df, gnb_iprlc_rel_df, gnb_mac_attempts_df, gnb_mcs_reports_df, ue_ip_packets_df, ue_rlc_segments_df, ue_mac_attempts_df, ue_iprlc_rel_df):
-        self.nlmt_df = nlmt_df
-        self.gnb_ip_packets_df = gnb_ip_packets_df
-        self.gnb_rlc_segments_df = gnb_rlc_segments_df
-        self.gnb_iprlc_rel_df = gnb_iprlc_rel_df
-        self.gnb_mac_attempts_df = gnb_mac_attempts_df
-        self.gnb_mcs_reports_df = gnb_mcs_reports_df
-        self.gnb_mcs_reports_df = gnb_mcs_reports_df
-        self.ue_ip_packets_df = ue_ip_packets_df
-        self.ue_rlc_segments_df = ue_rlc_segments_df
-        self.ue_mac_attempts_df = ue_mac_attempts_df
-        self.ue_iprlc_rel_df = ue_iprlc_rel_df
-
-        # check and report the first and last ue ip ids
-        self.first_ueipid = self.ue_ip_packets_df['ip_id'].min()
-        self.last_ueipid = self.ue_ip_packets_df['ip_id'].max()
-
-        # check and report the first and last rlc.txpdu.srn
-        self.first_rlcsrn = self.ue_rlc_segments_df["rlc.txpdu.srn"].min()
-        self.last_rlcsrn = self.ue_rlc_segments_df["rlc.txpdu.srn"].max()
-
-        # check and report the first and last gnb sns
-        self.first_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].min()
-        self.last_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].max()
-
-        # check and report the first and last timestamps
-        self.first_ueip_ts = self.ue_ip_packets_df['ip.in.timestamp'].min()
-        self.last_ueip_ts = self.ue_ip_packets_df['ip.in.timestamp'].max()
-
-        # check and report the ue_ip_ids and gnb sns
-        logger.debug(f"Imported online data, with UE IDs ranging from {self.ue_ip_packets_df['ip_id'].min()} to {self.ue_ip_packets_df['ip_id'].max()}, and GNB SNs ranging from {self.gnb_ip_packets_df['gtp.out.sn'].min()} to {self.gnb_ip_packets_df['gtp.out.sn'].max()}")
+        else:
+    
+            self.nlmt_df = nlmt_df
+            self.gnb_ip_packets_df = gnb_ip_packets_df
+            self.gnb_rlc_segments_df = gnb_rlc_segments_df
+            self.gnb_iprlc_rel_df = gnb_iprlc_rel_df
+            self.gnb_mac_attempts_df = gnb_mac_attempts_df
+            self.gnb_mcs_reports_df = gnb_mcs_reports_df
+            self.gnb_mcs_reports_df = gnb_mcs_reports_df
+            self.ue_ip_packets_df = ue_ip_packets_df
+            self.ue_rlc_segments_df = ue_rlc_segments_df
+            self.ue_mac_attempts_df = ue_mac_attempts_df
+            self.ue_iprlc_rel_df = ue_iprlc_rel_df
+    
+            # check and report the first and last ue ip ids
+            self.first_ueipid = self.ue_ip_packets_df['ip_id'].min()
+            self.last_ueipid = self.ue_ip_packets_df['ip_id'].max()
+    
+            # check and report the first and last rlc.txpdu.srn
+            self.first_rlcsrn = self.ue_rlc_segments_df["rlc.txpdu.srn"].min()
+            self.last_rlcsrn = self.ue_rlc_segments_df["rlc.txpdu.srn"].max()
+    
+            # check and report the first and last gnb sns
+            self.first_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].min()
+            self.last_gnbsn = self.gnb_ip_packets_df['gtp.out.sn'].max()
+    
+            # check and report the first and last timestamps
+            self.first_ueip_ts = self.ue_ip_packets_df['ip.in.timestamp'].min()
+            self.last_ueip_ts = self.ue_ip_packets_df['ip.in.timestamp'].max()
+    
+            # check and report the ue_ip_ids and gnb sns
+            logger.debug(f"Imported online data, with UE IDs ranging from {self.ue_ip_packets_df['ip_id'].min()} to {self.ue_ip_packets_df['ip_id'].max()}, and GNB SNs ranging from {self.gnb_ip_packets_df['gtp.out.sn'].min()} to {self.gnb_ip_packets_df['gtp.out.sn'].max()}")
 
 
     def figure_packet_arrivals_from_ts(self, ts_begin, ts_end):
