@@ -123,10 +123,26 @@ def decompose_packet_delays(flat_packet, complete_packet):
         pass
 
     # transmission delay
-    try:
-        delays["transmission_delay"] = (rlc0_mac_attempts[0]["phy.out_t"] - rlc0_mac_attempts[0]['phy.in_t'])*1000
-    except:
-        pass
+    # Loop through all RLC segments and their MAC attempts
+    for rlc in rlc_attempts:
+        mac_attempts = rlc.get("mac.attempts", [])
+        if not mac_attempts:
+            continue
+        for mac in mac_attempts:
+            try:
+                delay_ms = (mac["phy.decode_t"] - mac["phy.in_t"]) * 1000
+                if delay_ms >= 0:
+                    delays["transmission_delay"] = delay_ms
+                    break
+            except:
+                continue
+        if delays["transmission_delay"] is not None:
+            break
+                
+    #try:
+    #    delays["transmission_delay"] = (rlc0_mac_attempts[0]["phy.out_t"] - rlc0_mac_attempts[0]['phy.in_t'])*1000
+    #except:
+    #    pass
 
     rlc_max = max(rlc_attempts, key=lambda r: len(r.get("mac.attempts", [])))
     rlc_max_mac_attempts = rlc_max.get("mac.attempts", [])
