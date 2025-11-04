@@ -4,7 +4,7 @@ from edaf.core.common.utils import RingBuffer
 from edaf.core.uplink.gnb.ip import find_ip_packets
 from edaf.core.uplink.gnb.rlc import find_rlc_reports, find_rlc_segments
 from edaf.core.uplink.gnb.sched import find_sched_events, find_sched_maps, find_mcs_reports
-from edaf.core.uplink.gnb.mac import find_mac_successful_attempts, find_mac_failed_attempts
+from edaf.core.uplink.gnb.mac import find_mac_successful_attempts, find_mac_failed_attempts, find_rssi_values
 import pandas as pd
 
 import os
@@ -16,12 +16,13 @@ class ProcessULGNB:
     def __init__(
             self,
             enable_ip_packets = True,
-            enable_rlc_segments = True,
-            enable_sched_reports = True,
-            enable_sched_maps = True,
-            enable_rlc_reports = True,
-            enable_mac_attempts = True,
-            enable_mcs_reports = True,
+            enable_rlc_segments = False,
+            enable_sched_reports = False,
+            enable_sched_maps = False,
+            enable_rlc_reports = False,
+            enable_mac_attempts = False,
+            enable_mcs_reports = False,
+            enable_rssi_values = True,
             silent = False
         ):
         self.enable_ip_packets = enable_ip_packets
@@ -31,6 +32,7 @@ class ProcessULGNB:
         self.enable_rlc_reports = enable_rlc_reports
         self.enable_mac_attempts = enable_mac_attempts
         self.enable_mcs_reports = enable_mcs_reports
+        self.enable_rssi_values = enable_rssi_values
 
         # maximum number of lines to check
         self.previous_lines_ip = RingBuffer(500)
@@ -81,4 +83,9 @@ class ProcessULGNB:
         else:
             mcs_reports_df = None
 
-        return ip_packets_df, rlc_segments_df, sched_reports_df, sched_maps_df, rlc_reports_df, mac_attempts_df, mcs_reports_df
+        if self.enable_rssi_values:
+            rssi_values_df = find_rssi_values(lines, self.silent)
+        else:
+            rssi_values_df = None
+
+        return ip_packets_df, rlc_segments_df, sched_reports_df, sched_maps_df, rlc_reports_df, mac_attempts_df, mcs_reports_df, rssi_values_df

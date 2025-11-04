@@ -13,6 +13,12 @@ if not os.getenv('DEBUG'):
     logger.remove()
     logger.add(sys.stdout, level="INFO")
 
+# This file is for experimenting with edaf features. 
+# Primarily the features to add are
+#
+# 1. Add capability to extract snr, rssi, rsrp, cqi, etc from the edaf log files
+# 2. Associate each of these features to the respective packets/segments 
+
 # in case you have offline parquet journey files, you can use this script to decompose delay
 # pass the address of a folder in argv with the following structure:
 # FOLDER_ADDR/
@@ -24,7 +30,7 @@ if not os.getenv('DEBUG'):
 # ---- se_*.json.gz
 
 # create database file by running
-# python offline_edaf.py results/240928_082545_results results/240928_082545_results/database.db
+# python exp_edaf.py results/240928_082545_results results/240928_082545_results/database.db
 
 if __name__ == "__main__":
 
@@ -74,13 +80,14 @@ if __name__ == "__main__":
     logger.success(f"Tables successfully saved to '{result_database_file}'.")
 
 
-    # Post process examples:
-    # 1) Packet analyzer
-    packet_analyzer = ULPacketAnalyzer(db_addr=result_database_file)
-    UE_PACKET_INSERTIONS = 100
-    uids_arr = list(range(packet_analyzer.first_ueipid, packet_analyzer.first_ueipid + UE_PACKET_INSERTIONS))
-    packets_dict = packet_analyzer.figure_packettx_from_ueipids(uids_arr)
-    print(packets_dict)
+    # # Post process examples:
+    # # 1) Packet analyzer
+    # packet_analyzer = ULPacketAnalyzer(db_addr=result_database_file)
+    # uids_arr = range(packet_analyzer.first_ueipid, packet_analyzer.last_ueipid+1)
+    # # UE_PACKET_INSERTIONS = 100
+    # # uids_arr = list(range(packet_analyzer.first_ueipid, packet_analyzer.first_ueipid + UE_PACKET_INSERTIONS))
+    # packets_dict = packet_analyzer.figure_packettx_from_ueipids(uids_arr)
+    # print(packets_dict)
 
     # # 2) Channel analyzer
     # chan_analyzer = ULChannelAnalyzer(result_database_file)

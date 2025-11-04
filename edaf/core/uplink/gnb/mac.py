@@ -281,3 +281,61 @@ def find_mac_failed_attempts(previous_lines : RingBuffer, lines, silent = False)
     df = pd.DataFrame(mac_attempts)
     return df
 
+def find_rssi_values(previous_lines : RingBuffer, lines, silent = False):
+
+    #lines = sorted(unsortedlines, key=sort_key, reverse=False)
+    rssiVal = []
+    for line_number, line in enumerate(lines):
+        line = line.replace('\n', '')
+        previous_lines.append(line)
+
+        KW_RSSI_DEC = 'rssiVal'
+
+        # find line starting with 'PHY'
+        # PHY rnti3cde.rssi-138.rssi_digital44.n_rb_ul8.wband_cqi127.n0_power0.rx_power23584.frame984.slot18
+        KW_RSSI_VAL = 'PHY'
+        if (KW_RSSI_VAL in line):
+            timestamp_match = re.search(r'^(\d+\.\d+)', line)
+            rnti_match = re.search(r'rnti(\d+)', line)
+            rssi_match = re.search(r'rssi(\d+)', line)
+            rssiDigital_match = re.search(r'rssi_digital(\d+)', line)
+            n_rb_ul_match = re.search(r'n_rb_ul(\d+)', line)
+            wband_cqi_match = re.search(r'wband_cqi(\d+)', line)
+            n0_power_match = re.search(r'n0_power(\d+)', line)
+            rx_power_match = re.search(r'rx_power(\d+)', line)
+            fm_match = re.search(r'frame(\d+)', line)
+            sl_match = re.search(r'slot(\d+)', line)
+            if timestamp_match and rnti_match and rssi_match and rssiDigital_match and fm_match and sl_match and n_rb_ul_match and wband_cqi_match and n0_power_match and rx_power_match:
+                timestamp = float(timestamp_match.group(1))
+                fm_value = int(fm_match.group(1))
+                sl_value = int(sl_match.group(1))
+                rnti_value = int(rnti_match.group(1))
+                rssi_value = int(rssi_match.group(1))
+                rssiDigital_value = int(rssiDigital_match.group(1))
+                n_rb_ul_value = int(n_rb_ul_match.group(1))
+                wband_cqi_value = int(wband_cqi_match.group(1))
+                n0_power_value = int(n0_power_match.group(1))
+                rx_power_value = int(rx_power_match.group(1))                
+            else:
+                logger.warning(f"[GNB] For {KW_RSSI_VAL}, could not find properties in line {line_number-jd-1}. Skipping this '{KW_RSSI_VAL}'")
+                continue
+            rssi_dec_arr = {
+                KW_RSSI_DEC : {
+                    'timestamp' : timestamp,
+                    'frame': fm_value,
+                    'slot': sl_value,
+                    'rssi': rssi_value,
+                    'rssi_digital': rssiDigital_value,
+                    'nRb': n_rb_ul_value,
+                    'wband_cqi' : wband_cqi_value,
+                    'n0_power' : n0_power_value,
+                    'rx_power' : rx_power_value,
+                    'rnti' : rnti_value,
+                }
+            }
+            logger.debug(f"[GNB] Found '{KW_RSSI_DEC}' in line {line_number}, {rssi_dec_arr[KW_RSSI_DEC]}")
+
+
+    # Convert the list of dicts to a DataFrame
+    df = pd.DataFrame(rssiVal)
+    return df
