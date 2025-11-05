@@ -163,6 +163,7 @@ cython_debug/
 *_results/
 results/
 influxdbv2/
+data/
 *.lseq
 *.parquet
 *.db

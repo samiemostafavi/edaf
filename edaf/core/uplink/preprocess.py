@@ -29,17 +29,17 @@ def preprocess_ul(
     for nlmt_rec in nlmt_records:
         nlmt_flat_records.append(flatten_dict(nlmt_rec))
     logger.info(f"Extracted {len(nlmt_flat_records)} nlmt records.")
-    nlmt_df = pd.DataFrame(nlmt_flat_records)
+    nlmt_df = pd.DataFrame(nlmt_flat_records[:100000])
     logger.success(f"Processed NLMT records")
     
     # GNB preprocess
-    l1linesgnb = gnbrdts.return_rdtsctots(gnb_lines)
+    l1linesgnb = gnbrdts.return_rdtsctots(gnb_lines[:100000])
     if len(l1linesgnb) > 0:
-        gnb_ip_packets_df, gnb_rlc_segments_df, gnb_sched_reports_df, gnb_sched_maps_df, gnb_rlc_reports_df, gnb_mac_attempts_df, gnb_mcs_reports_df = gnbproc.run(l1linesgnb)
+        gnb_ip_packets_df, gnb_rlc_segments_df, gnb_sched_reports_df, gnb_sched_maps_df, gnb_rlc_reports_df, gnb_mac_attempts_df, gnb_mcs_reports_df, gnb_rssi_values_df = gnbproc.run(l1linesgnb)
     logger.success(f"Processed GNB lines")
     
     # UE preprocess
-    l1linesue = uerdts.return_rdtsctots(ue_lines)
+    l1linesue = uerdts.return_rdtsctots(ue_lines[:100000])
     l1linesue.reverse()
     if len(l1linesue) > 0:
         ue_ip_packets_df, ue_rlc_segments_df, ue_mac_attempts_df, ue_uldcis_df, ue_bsrupds_df, ue_bsrtxs_df, ue_srtrigs_df, ue_srtxs_df = ueproc.run(l1linesue)
@@ -85,6 +85,11 @@ def preprocess_ul(
         gnb_mcs_reports_df.to_sql('gnb_mcs_reports', sqlite_conn, if_exists='replace', index=False)
     else:
         print("gnb_mcs_reports_df is None or empty. Skipping to_sql.")
+
+    if gnb_rssi_values_df is not None and not gnb_rssi_values_df.empty:
+        gnb_rssi_values_df.to_sql('gnb_rssi_values', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("gnb_rssi_values_df is None or empty. Skipping to_sql.")
         
     # Create gnb databases relationship
     # For each 'gtp.out.sn' in gnb_ip_packets_df, find corresponding 'sdu_id' entries in gnb_rlc_segments_df

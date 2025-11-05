@@ -296,8 +296,8 @@ def find_rssi_values(previous_lines : RingBuffer, lines, silent = False):
         KW_RSSI_VAL = 'PHY'
         if (KW_RSSI_VAL in line):
             timestamp_match = re.search(r'^(\d+\.\d+)', line)
-            rnti_match = re.search(r'rnti(\d+)', line)
-            rssi_match = re.search(r'rssi(\d+)', line)
+            rnti_match = re.search(r'rnti([0-9a-fA-F]+)', line)
+            rssi_match = re.search(r'rssi(-?\d+)', line)
             rssiDigital_match = re.search(r'rssi_digital(\d+)', line)
             n_rb_ul_match = re.search(r'n_rb_ul(\d+)', line)
             wband_cqi_match = re.search(r'wband_cqi(\d+)', line)
@@ -305,11 +305,11 @@ def find_rssi_values(previous_lines : RingBuffer, lines, silent = False):
             rx_power_match = re.search(r'rx_power(\d+)', line)
             fm_match = re.search(r'frame(\d+)', line)
             sl_match = re.search(r'slot(\d+)', line)
-            if timestamp_match and rnti_match and rssi_match and rssiDigital_match and fm_match and sl_match and n_rb_ul_match and wband_cqi_match and n0_power_match and rx_power_match:
+            if timestamp_match and rssi_match and rssiDigital_match and fm_match and sl_match and n_rb_ul_match and wband_cqi_match and n0_power_match and rx_power_match:
                 timestamp = float(timestamp_match.group(1))
                 fm_value = int(fm_match.group(1))
                 sl_value = int(sl_match.group(1))
-                rnti_value = int(rnti_match.group(1))
+                rnti_value = rnti_match.group(1)
                 rssi_value = int(rssi_match.group(1))
                 rssiDigital_value = int(rssiDigital_match.group(1))
                 n_rb_ul_value = int(n_rb_ul_match.group(1))
@@ -317,7 +317,7 @@ def find_rssi_values(previous_lines : RingBuffer, lines, silent = False):
                 n0_power_value = int(n0_power_match.group(1))
                 rx_power_value = int(rx_power_match.group(1))                
             else:
-                logger.warning(f"[GNB] For {KW_RSSI_VAL}, could not find properties in line {line_number-jd-1}. Skipping this '{KW_RSSI_VAL}'")
+                logger.warning(f"[GNB] For {KW_RSSI_VAL}, could not find properties in line {line_number-1}. Skipping this '{KW_RSSI_DEC}'")
                 continue
             rssi_dec_arr = {
                 KW_RSSI_DEC : {
@@ -335,6 +335,7 @@ def find_rssi_values(previous_lines : RingBuffer, lines, silent = False):
             }
             logger.debug(f"[GNB] Found '{KW_RSSI_DEC}' in line {line_number}, {rssi_dec_arr[KW_RSSI_DEC]}")
 
+            rssiVal.append(flatten_dict(rssi_dec_arr))
 
     # Convert the list of dicts to a DataFrame
     df = pd.DataFrame(rssiVal)

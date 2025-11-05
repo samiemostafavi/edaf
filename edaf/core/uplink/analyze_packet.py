@@ -10,7 +10,7 @@ if not os.getenv('DEBUG'):
 class ULPacketAnalyzer:
     def __init__(self, db_addr=None, 
                  nlmt_df=None, gnb_ip_packets_df=None, gnb_rlc_segments_df=None,
-                 gnb_iprlc_rel_df=None, gnb_mac_attempts_df=None, gnb_mcs_reports_df=None,
+                 gnb_iprlc_rel_df=None, gnb_mac_attempts_df=None, gnb_mcs_reports_df=None, gnb_rssi_values_df=None,
                  ue_ip_packets_df=None, ue_rlc_segments_df=None,
                  ue_mac_attempts_df=None, ue_iprlc_rel_df=None):
 
@@ -39,6 +39,9 @@ class ULPacketAnalyzer:
     
             self.gnb_mac_attempts_df = pd.read_sql('SELECT * FROM gnb_mac_attempts', conn)
             logger.debug(f"gnb_mac_attempts_df: {self.gnb_mac_attempts_df.columns.tolist()}")
+
+            self.gnb_rssi_values_df = pd.read_sql('SELECT * FROM gnb_rssi_values', conn)
+            logger.debug(f"gnb_rssi_values_df: {self.gnb_rssi_values_df.columns.tolist()}")
     
             self.ue_ip_packets_df = pd.read_sql('SELECT * FROM ue_ip_packets', conn)
             logger.debug(f"ue_ip_packets_df: {self.ue_ip_packets_df.columns.tolist()}")
@@ -83,6 +86,7 @@ class ULPacketAnalyzer:
             self.gnb_mac_attempts_df = gnb_mac_attempts_df
             self.gnb_mcs_reports_df = gnb_mcs_reports_df
             self.gnb_mcs_reports_df = gnb_mcs_reports_df
+            self.gnb_rssi_values_df = gnb_rssi_values_df
             self.ue_ip_packets_df = ue_ip_packets_df
             self.ue_rlc_segments_df = ue_rlc_segments_df
             self.ue_mac_attempts_df = ue_mac_attempts_df

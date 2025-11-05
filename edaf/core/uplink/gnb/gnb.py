@@ -16,12 +16,12 @@ class ProcessULGNB:
     def __init__(
             self,
             enable_ip_packets = True,
-            enable_rlc_segments = False,
-            enable_sched_reports = False,
-            enable_sched_maps = False,
-            enable_rlc_reports = False,
-            enable_mac_attempts = False,
-            enable_mcs_reports = False,
+            enable_rlc_segments = True,
+            enable_sched_reports = True,
+            enable_sched_maps = True,
+            enable_rlc_reports = True,
+            enable_mac_attempts = True,
+            enable_mcs_reports = True,
             enable_rssi_values = True,
             silent = False
         ):
@@ -84,7 +84,7 @@ class ProcessULGNB:
             mcs_reports_df = None
 
         if self.enable_rssi_values:
-            rssi_values_df = find_rssi_values(lines, self.silent)
+            rssi_values_df = find_rssi_values(self.previous_lines_mac1, lines, self.silent)
         else:
             rssi_values_df = None
 
