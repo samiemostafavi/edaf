@@ -411,6 +411,7 @@ class ULPacketAnalyzer:
                     break
 
             # set the rest of the mac attempt
+            # New version: 7th Nov 2025: Added fields measuring rssi, wideband cqi, noise power, receive power
             macattempt = {
                 'len' : ue_mac_attempt['phy.tx.len'],
                 'id' : ue_mac_attempt['mac_id'],
@@ -422,6 +423,10 @@ class ULPacketAnalyzer:
                 'rbs' : int(ue_mac_attempt[f'phy.tx.nb_rb']),
                 'symbols' : int(ue_mac_attempt[f'phy.tx.nb_sym']),
                 'mcs' : int(mac_mcs_value),
+                'rssi' : None,
+                'wideband_cqi' : None,
+                'noise_pwr' : None,
+                'rx_pwr' : None,
                 'phy.decode_t' : None,
                 'phy.out_t' : None,
                 'acked' : False,
@@ -459,6 +464,10 @@ class ULPacketAnalyzer:
                 else:
                     # possibly successful harq attempt
                     macattempt['phy.decode_t'] = float(gnb_mac_attempt['phy.decodeend.timestamp'])
+                    macattempt['rssi'] = float(gnb_mac_attempt['phy.measure.rssi.rssi'])
+                    macattempt['wideband_cqi'] = float(gnb_mac_attempt['phy.measure.rssi.wband_cqi'])
+                    macattempt['noise_pwr'] = float(gnb_mac_attempt['phy.measure.rssi.n0_power'])
+                    macattempt['rx_pwr'] = float(gnb_mac_attempt['phy.measure.rssi.rx_power'])
                     if gnb_mac_attempt['phy.decodeend.suc']:
                         # possibly successful gnb harq attempt
 

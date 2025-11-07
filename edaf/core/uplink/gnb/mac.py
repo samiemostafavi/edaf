@@ -140,7 +140,58 @@ def find_mac_successful_attempts(previous_lines : RingBuffer, lines, silent = Fa
                 logger.warning(f"[GNB] Could not find '{KW_MAC_DETEND}' before {line_number} for {KW_MAC_DEC}")
                 mac_dec_arr[KW_MAC_DETEND] = {}
 
+            # find 'PHY' for rssi, cqi measurements# PHY rnti3cde.rssi-138.rssi_digital44.n_rb_ul8.wband_cqi127.n0_power0.rx_power23584.frame984.slot18
+            found_RSSI_VAL = False            
+            KW_RSSI_VAL = 'PHY'
+            KW_RSSI_DEC = 'phy.measure.rssi'
+            fmstr = f'frame{fm_value}'
+            slstr = f'slot{sl_value}'
+            for jd,prev_ljne in enumerate(prev_lines):
+                if (KW_RSSI_VAL in prev_ljne) and (fmstr in prev_ljne) and (slstr in prev_ljne):
+                    timestamp_match = re.search(r'^(\d+\.\d+)', prev_ljne)
+                    rnti_match = re.search(r'rnti([0-9a-fA-F]+)', prev_ljne)
+                    rssi_match = re.search(r'rssi(-?\d+)', prev_ljne)
+                    rssiDigital_match = re.search(r'rssi_digital(\d+)', prev_ljne)
+                    n_rb_ul_match = re.search(r'n_rb_ul(\d+)', prev_ljne)
+                    wband_cqi_match = re.search(r'wband_cqi(\d+)', prev_ljne)
+                    n0_power_match = re.search(r'n0_power(\d+)', prev_ljne)
+                    rx_power_match = re.search(r'rx_power(\d+)', prev_ljne)
+                    fm_match = re.search(r'frame(\d+)', prev_ljne)
+                    sl_match = re.search(r'slot(\d+)', prev_ljne)
+                    if timestamp_match and rssi_match and rssiDigital_match and fm_match and sl_match and n_rb_ul_match and wband_cqi_match and n0_power_match and rx_power_match:
+                        timestamp = float(timestamp_match.group(1))
+                        fm_value = int(fm_match.group(1))
+                        sl_value = int(sl_match.group(1))
+                        rnti_value = rnti_match.group(1)
+                        rssi_value = int(rssi_match.group(1))
+                        rssiDigital_value = int(rssiDigital_match.group(1))
+                        n_rb_ul_value = int(n_rb_ul_match.group(1))
+                        wband_cqi_value = int(wband_cqi_match.group(1))
+                        n0_power_value = int(n0_power_match.group(1))
+                        rx_power_value = int(rx_power_match.group(1))
+                        
+                        # Add the extracted values the mac_dec_array list
+                        mac_dec_arr[KW_RSSI_DEC] = {
+                            'timestamp' : timestamp,
+                            'frame':fm_value,
+                            'slot': sl_value,
+                            'rssi': rssi_value,
+                            'rssi_digital': rssiDigital_value,
+                            'nRb': n_rb_ul_value,
+                            'wband_cqi' : wband_cqi_value,
+                            'n0_power' : n0_power_value,
+                            'rx_power' : rx_power_value,
+                            'rnti' : rnti_value,
+                        }
+                        found_RSSI_VAL = True
+                        logger.debug(f"[GNB] Found '{KW_RSSI_VAL}' in line {line_number-jd-1}")
+                        break
+                    
+            if not found_RSSI_VAL:
+                logger.warning(f"[GNB] Could not find '{KW_RSSI_VAL}' before {line_number} for {KW_RSSI_DEC}")
+                mac_dec_arr[KW_RSSI_DEC] = {}
 
+                   
             # find 'phy.detectstart'
             hbufstr = f'Hbuf{hbuf_value}'
             fmstr = f'fm{fm_value}'
