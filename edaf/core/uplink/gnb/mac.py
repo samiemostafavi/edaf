@@ -485,3 +485,90 @@ def find_ulcqi_values(previous_lines : RingBuffer, lines, silent = False):
             # if not found_CRC_RSSI_VAL:
             #     logger.warning(f"[GNB] Could not find '{KW_CRC_RSSI_VAL}' before {line_number} for {KW_CRC_RSSI_DEC}")
             #     mac_dec_arr[KW_CRC_RSSI_DEC] = {}
+
+def find_rsrp_values(previous_lines : RingBuffer, lines, silent = False):
+
+    rsrp_values = []
+    for line_number, line in enumerate(lines):
+        line = line.replace('\n', '')
+        previous_lines.append(line)
+
+        # find 'sr.received' for rsrp measurements
+        # 174909209485186107 U sr.received rsrp-94.rnti3cde.frame892.slot4  
+        # 
+        # ? : Why slot is always 4 in snr and rsrp measurements     
+        KW_RSRP_VAL = 'sr.received'
+        KW_RSRP_DEC = 'phy.rsrp_measure'
+        # found_rsrp_val = False
+        if (KW_RSRP_VAL in line):
+            timestamp_match = re.search(r'^(\d+\.\d+)', line)
+            rnti_match = re.search(r'rnti([0-9a-fA-F]+)', line)
+            rsrp_match = re.search(r'rsrp(-?\d+)', line)
+            fm_match = re.search(r'frame(\d+)', line)
+            sl_match = re.search(r'slot(\d+)', line)
+            if timestamp_match and rsrp_match and fm_match and sl_match:
+                timestamp = float(timestamp_match.group(1))
+                fm_value = int(fm_match.group(1))
+                sl_value = int(sl_match.group(1))
+                rnti_value = rnti_match.group(1)
+                rsrp_value = int(rsrp_match.group(1))
+                # found_rsrp_val = True
+            else:
+                logger.warning(f"[GNB] For {KW_RSRP_VAL}, could not find properties in line {line_number-1}. Skipping this '{KW_RSRP_DEC}'")
+                continue
+
+            # Add the extracted values the rsrp_arr list
+            rsrp_arr = {
+                KW_RSRP_DEC : {
+                    'timestamp' : timestamp,
+                    'frame': fm_value,
+                    'slot': sl_value,
+                    'rsrp': rsrp_value,
+                    'rnti' : rnti_value,
+                }
+            }           
+        
+            rsrp_values.append(flatten_dict(rsrp_arr))
+    
+    # Convert the list of dicts to a DataFrame
+    df = pd.DataFrame(rsrp_values)
+    return df
+
+    #         # lets go back in lines
+    #         prev_lines = previous_lines.reverse_items()
+            
+    #         # Now find and extract the snr value
+    #         # 174909209485172091 U PHY NR Estimation frame892.slot4.snr10
+    #         KW_SNR_DEC = 'PHY NR Estimation'
+
+    #         fmstr = f'fm{fm_value}'
+    #         slstr = f'sl{sl_value}'
+    #         found_snr_val = False
+    #         for jd,prev_line in enumerate(prev_lines):
+    #             if (KW_SNR_DEC in prev_line) and (fmstr in prev_line) and (slstr in prev_line):
+    #                 timestamp_match = re.search(r'^(\d+\.\d+)', prev_line)
+    #                 fm_match = re.search(r'frame(\d+)', prev_line)
+    #                 sl_match = re.search(r'slot(\d+)', prev_line)
+    #                 snr_match = re.search(r'snr(\d+)', prev_line)
+    #                 if timestamp_match and snr_match and fm_match and sl_match:
+    #                     timestamp = float(timestamp_match.group(1))
+    #                     fm_value = int(fm_match.group(1))
+    #                     sl_value = int(sl_match.group(1))
+    #                     snr_value = int(snr_match.group(1))
+    #                     found_snr_val = True
+    #                     # Add the snr value to the structure
+    #                     rsrp_snr_arr[KW_RSRP_SNR_DEC]['snr'] = snr_value
+    #                     break
+    #                 else:
+    #                     logger.warning(f"[GNB] For {KW_SNR_DEC}, could not find properties in line {line_number-1}. Skipping this '{KW_SNR_DEC}'")
+    #                     continue
+            
+    #         if not found_snr_val:
+    #             rsrp_snr_arr[KW_RSRP_SNR_DEC] = {}
+
+    #         rsrp_snr_values.append(flatten_dict(rsrp_snr_arr))
+    
+    # # Convert the list of dicts to a DataFrame
+    # df = pd.DataFrame(rsrp_snr_values)
+    # return df
+
