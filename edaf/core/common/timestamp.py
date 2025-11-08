@@ -49,4 +49,7 @@ class rdtsctotsOnline():
                     logger.warning(f"non-numeric first element in {self.name} lseq: {l}")
             else:
                 logger.warning(f"unusual line in {self.name} lseq: {l}")
-        return sorted(newlines)
+
+        # Added case-insensitive key to resolve sorting issues - Wilson
+        # TODO Try to come up with a different scheme to resolve this issue     
+        return sorted(newlines, key=str.lower)

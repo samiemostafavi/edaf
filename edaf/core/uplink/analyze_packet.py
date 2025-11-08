@@ -464,10 +464,10 @@ class ULPacketAnalyzer:
                 else:
                     # possibly successful harq attempt
                     macattempt['phy.decode_t'] = float(gnb_mac_attempt['phy.decodeend.timestamp'])
-                    macattempt['rssi'] = float(gnb_mac_attempt['phy.measure.rssi.rssi'])
-                    macattempt['wideband_cqi'] = float(gnb_mac_attempt['phy.measure.rssi.wband_cqi'])
-                    macattempt['noise_pwr'] = float(gnb_mac_attempt['phy.measure.rssi.n0_power'])
-                    macattempt['rx_pwr'] = float(gnb_mac_attempt['phy.measure.rssi.rx_power'])
+                    macattempt['rssi'] = float(gnb_mac_attempt['phy.measure.rssi'])
+                    macattempt['wideband_cqi'] = float(gnb_mac_attempt['phy.measure.wband_cqi'])
+                    macattempt['noise_pwr'] = float(gnb_mac_attempt['phy.measure.n0_power'])
+                    macattempt['rx_pwr'] = float(gnb_mac_attempt['phy.measure.rx_power'])
                     if gnb_mac_attempt['phy.decodeend.suc']:
                         # possibly successful gnb harq attempt
 

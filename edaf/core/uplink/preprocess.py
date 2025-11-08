@@ -35,7 +35,7 @@ def preprocess_ul(
     # GNB preprocess
     l1linesgnb = gnbrdts.return_rdtsctots(gnb_lines[:100000])
     if len(l1linesgnb) > 0:
-        gnb_ip_packets_df, gnb_rlc_segments_df, gnb_sched_reports_df, gnb_sched_maps_df, gnb_rlc_reports_df, gnb_mac_attempts_df, gnb_mcs_reports_df, gnb_rssi_values_df = gnbproc.run(l1linesgnb)
+        gnb_ip_packets_df, gnb_rlc_segments_df, gnb_sched_reports_df, gnb_sched_maps_df, gnb_rlc_reports_df, gnb_mac_attempts_df, gnb_mcs_reports_df, gnb_rssi_values_df, gnb_ulcqi_values_df = gnbproc.run(l1linesgnb)
     logger.success(f"Processed GNB lines")
     
     # UE preprocess

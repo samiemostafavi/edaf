@@ -143,7 +143,7 @@ def find_mac_successful_attempts(previous_lines : RingBuffer, lines, silent = Fa
             # find 'PHY' for rssi, cqi measurements# PHY rnti3cde.rssi-138.rssi_digital44.n_rb_ul8.wband_cqi127.n0_power0.rx_power23584.frame984.slot18
             found_RSSI_VAL = False            
             KW_RSSI_VAL = 'PHY'
-            KW_RSSI_DEC = 'phy.measure.rssi'
+            KW_RSSI_DEC = 'phy.measure'
             fmstr = f'frame{fm_value}'
             slstr = f'slot{sl_value}'
             for jd,prev_ljne in enumerate(prev_lines):
@@ -218,6 +218,8 @@ def find_mac_successful_attempts(previous_lines : RingBuffer, lines, silent = Fa
                 mac_dec_arr[KW_MAC_DETSTART] = {
                     'timestamp' : None,
                 }
+
+                    
 
             mac_attempts.append(flatten_dict(mac_dec_arr))
 
@@ -391,3 +393,95 @@ def find_rssi_values(previous_lines : RingBuffer, lines, silent = False):
     # Convert the list of dicts to a DataFrame
     df = pd.DataFrame(rssiVal)
     return df
+
+
+def find_ulcqi_values(previous_lines : RingBuffer, lines, silent = False):
+    
+    ulcqi_values = []
+    for line_number, line in enumerate(lines):
+        line = line.replace('\n', '')
+        previous_lines.append(line)
+
+        # find 'PHY2MAC' for crc_rssi, ul_cqi measurements
+        # 174909208664010951 U PHY2MAC rssi992.ul_cqi187.hqpid1.CC_idP0.gnb_mod_idP0.fm857.sl18.len24.ta31.rnti3cde       
+        KW_UL_CQI_VAL = 'PHY2MAC'
+        KW_UL_CQI_DEC = 'phy2mac.measure'
+        if (KW_UL_CQI_VAL in line):
+            timestamp_match = re.search(r'^(\d+\.\d+)', line)
+            rnti_match = re.search(r'rnti([0-9a-fA-F]+)', line)
+            crc_rssi_match = re.search(r'rssi(-?\d+)', line)
+            hqpid_match = re.search(r'hqpid(\d+)', line)
+            ul_cqi_match = re.search(r'ul_cqi(\d+)', line)
+            fm_match = re.search(r'fm(\d+)', line)
+            sl_match = re.search(r'sl(\d+)', line)
+            if timestamp_match and crc_rssi_match and hqpid_match and fm_match and sl_match and ul_cqi_match:
+                timestamp = float(timestamp_match.group(1))
+                fm_value = int(fm_match.group(1))
+                sl_value = int(sl_match.group(1))
+                rnti_value = rnti_match.group(1)
+                crc_rssi_value = int(crc_rssi_match.group(1))
+                hqpid_value = int(hqpid_match.group(1))
+                ul_cqi_value = int(ul_cqi_match.group(1))
+            else:
+                logger.warning(f"[GNB] For {KW_UL_CQI_VAL}, could not find properties in line {line_number-1}. Skipping this '{KW_UL_CQI_DEC}'")
+                continue
+
+            # Add the extracted values the mac_dec_array list
+            ulcqi_arr = {
+                KW_UL_CQI_DEC : {
+                    'timestamp' : timestamp,
+                    'frame': fm_value,
+                    'slot': sl_value,
+                    'crc_rssi': crc_rssi_value,
+                    'hqpid': hqpid_value,
+                    'ul_cqi': ul_cqi_value,
+                    'rnti' : rnti_value,
+                }
+            }
+
+                      
+            # lets go back in lines
+            prev_lines = previous_lines.reverse_items()
+            
+            # Find if the mac retransmission was successful or not
+            # For this, find the following line
+            # phy.decodeend suc1.fm162.sl18.hqpid12.hqround0.Hbuf171586176.rbb0.rbs5.tbs24.mcs9.rnti1234
+            KW_PHY_DEC = 'phy.decodeend'
+            fmstr = f'fm{fm_value}'
+            slstr = f'sl{sl_value}'
+            hqpidstr = f'hqpid{hqpid_value}'
+            found_ulcqi_val = False
+            for jd,prev_line in enumerate(prev_lines):
+                if (KW_PHY_DEC in prev_line) and (fmstr in prev_line) and (slstr in prev_line) and (hqpidstr in prev_line):
+                    timestamp_match = re.search(r'^(\d+\.\d+)', prev_line)
+                    rnti_match = re.search(r'rnti([0-9a-fA-F]+)', prev_line)
+                    suc_match = re.search(r'suc(\d+)', prev_line)
+                    hqpid_match = re.search(r'hqpid(\d+)', prev_line)
+                    fm_match = re.search(r'fm(\d+)', prev_line)
+                    sl_match = re.search(r'sl(\d+)', prev_line)
+                    if timestamp_match and suc_match and hqpid_match and fm_match and sl_match:
+                        timestamp = float(timestamp_match.group(1))
+                        fm_value = int(fm_match.group(1))
+                        sl_value = int(sl_match.group(1))
+                        rnti_value = rnti_match.group(1)
+                        suc_value = int(suc_match.group(1))
+                        hqpid_value = int(hqpid_match.group(1))
+                        found_ulcqi_val = True
+                        break
+                    else:
+                        logger.warning(f"[GNB] For {KW_PHY_DEC}, could not find properties in line {line_number-1}. Skipping this '{KW_PHY_DEC}'")
+                        continue
+            
+            if not found_ulcqi_val:
+                ulcqi_arr[KW_UL_CQI_DEC] = {}
+            
+            ulcqi_values.append(flatten_dict(ulcqi_arr))
+                                     
+
+    # Convert the list of dicts to a DataFrame
+    df = pd.DataFrame(ulcqi_values)
+    return df
+
+            # if not found_CRC_RSSI_VAL:
+            #     logger.warning(f"[GNB] Could not find '{KW_CRC_RSSI_VAL}' before {line_number} for {KW_CRC_RSSI_DEC}")
+            #     mac_dec_arr[KW_CRC_RSSI_DEC] = {}
