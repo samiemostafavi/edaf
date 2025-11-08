@@ -4,7 +4,7 @@ from edaf.core.common.utils import RingBuffer
 from edaf.core.uplink.gnb.ip import find_ip_packets
 from edaf.core.uplink.gnb.rlc import find_rlc_reports, find_rlc_segments
 from edaf.core.uplink.gnb.sched import find_sched_events, find_sched_maps, find_mcs_reports
-from edaf.core.uplink.gnb.mac import find_mac_successful_attempts, find_mac_failed_attempts, find_rssi_values, find_ulcqi_values, find_rsrp_values
+from edaf.core.uplink.gnb.mac import find_mac_successful_attempts, find_mac_failed_attempts, find_rssi_values, find_ulcqi_values, find_rsrp_values, find_snr_values
 import pandas as pd
 
 import os
@@ -25,6 +25,7 @@ class ProcessULGNB:
             enable_rssi_values = True,
             enable_ulcqi_values = True,
             enable_rsrp_values = True,
+            enable_snr_values = True,
             silent = False
         ):
         self.enable_ip_packets = enable_ip_packets
@@ -37,6 +38,7 @@ class ProcessULGNB:
         self.enable_rssi_values = enable_rssi_values
         self.enable_ulcqi_values = enable_ulcqi_values
         self.enable_rsrp_values = enable_rsrp_values
+        self.enable_snr_values = enable_snr_values
 
         # maximum number of lines to check
         self.previous_lines_ip = RingBuffer(500)
@@ -102,5 +104,9 @@ class ProcessULGNB:
         else:
             rsrp_values_df = None
 
+        if self.enable_snr_values:
+            snr_values_df = find_snr_values(self.previous_lines_mac1, lines, self.silent)
+        else:
+            snr_values_df = None
 
-        return ip_packets_df, rlc_segments_df, sched_reports_df, sched_maps_df, rlc_reports_df, mac_attempts_df, mcs_reports_df, rssi_values_df, ulcqi_values_df, rsrp_values_df
+        return ip_packets_df, rlc_segments_df, sched_reports_df, sched_maps_df, rlc_reports_df, mac_attempts_df, mcs_reports_df, rssi_values_df, ulcqi_values_df, rsrp_values_df, snr_values_df

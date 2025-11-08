@@ -35,7 +35,7 @@ def preprocess_ul(
     # GNB preprocess
     l1linesgnb = gnbrdts.return_rdtsctots(gnb_lines[:100000])
     if len(l1linesgnb) > 0:
-        gnb_ip_packets_df, gnb_rlc_segments_df, gnb_sched_reports_df, gnb_sched_maps_df, gnb_rlc_reports_df, gnb_mac_attempts_df, gnb_mcs_reports_df, gnb_rssi_values_df, gnb_ulcqi_values_df, gnb_rsrp_values_df = gnbproc.run(l1linesgnb)
+        gnb_ip_packets_df, gnb_rlc_segments_df, gnb_sched_reports_df, gnb_sched_maps_df, gnb_rlc_reports_df, gnb_mac_attempts_df, gnb_mcs_reports_df, gnb_rssi_values_df, gnb_ulcqi_values_df, gnb_rsrp_values_df, gnb_snr_values_df = gnbproc.run(l1linesgnb)
     logger.success(f"Processed GNB lines")
     
     # UE preprocess
@@ -100,6 +100,11 @@ def preprocess_ul(
         gnb_rsrp_values_df.to_sql('gnb_rsrp_values', sqlite_conn, if_exists='replace', index=False)
     else:
         print("gnb_rsrp_values_df is None or empty. Skipping to_sql.")
+
+    if gnb_snr_values_df is not None and not gnb_snr_values_df.empty:
+        gnb_snr_values_df.to_sql('gnb_snr_values', sqlite_conn, if_exists='replace', index=False)
+    else:
+        print("gnb_snr_values_df is None or empty. Skipping to_sql.")
         
     # Create gnb databases relationship
     # For each 'gtp.out.sn' in gnb_ip_packets_df, find corresponding 'sdu_id' entries in gnb_rlc_segments_df

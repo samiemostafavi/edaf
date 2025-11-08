@@ -534,41 +534,46 @@ def find_rsrp_values(previous_lines : RingBuffer, lines, silent = False):
     df = pd.DataFrame(rsrp_values)
     return df
 
-    #         # lets go back in lines
-    #         prev_lines = previous_lines.reverse_items()
-            
-    #         # Now find and extract the snr value
-    #         # 174909209485172091 U PHY NR Estimation frame892.slot4.snr10
-    #         KW_SNR_DEC = 'PHY NR Estimation'
+def find_snr_values(previous_lines : RingBuffer, lines, silent = False):
 
-    #         fmstr = f'fm{fm_value}'
-    #         slstr = f'sl{sl_value}'
-    #         found_snr_val = False
-    #         for jd,prev_line in enumerate(prev_lines):
-    #             if (KW_SNR_DEC in prev_line) and (fmstr in prev_line) and (slstr in prev_line):
-    #                 timestamp_match = re.search(r'^(\d+\.\d+)', prev_line)
-    #                 fm_match = re.search(r'frame(\d+)', prev_line)
-    #                 sl_match = re.search(r'slot(\d+)', prev_line)
-    #                 snr_match = re.search(r'snr(\d+)', prev_line)
-    #                 if timestamp_match and snr_match and fm_match and sl_match:
-    #                     timestamp = float(timestamp_match.group(1))
-    #                     fm_value = int(fm_match.group(1))
-    #                     sl_value = int(sl_match.group(1))
-    #                     snr_value = int(snr_match.group(1))
-    #                     found_snr_val = True
-    #                     # Add the snr value to the structure
-    #                     rsrp_snr_arr[KW_RSRP_SNR_DEC]['snr'] = snr_value
-    #                     break
-    #                 else:
-    #                     logger.warning(f"[GNB] For {KW_SNR_DEC}, could not find properties in line {line_number-1}. Skipping this '{KW_SNR_DEC}'")
-    #                     continue
-            
-    #         if not found_snr_val:
-    #             rsrp_snr_arr[KW_RSRP_SNR_DEC] = {}
+    snr_values = []
+    for line_number, line in enumerate(lines):
+        line = line.replace('\n', '')
+        previous_lines.append(line)
 
-    #         rsrp_snr_values.append(flatten_dict(rsrp_snr_arr))
+        # find 'PHY NR Estimation' for snr measurements
+        # 174909209485172091 U PHY NR Estimation frame892.slot4.snr10  
+        # 
+        # ? : Why slot is always 4 in snr and rsrp measurements     
+        KW_SNR_VAL = 'PHY NR Estimation'
+        KW_SNR_DEC = 'phy.snr_measure'
+        if (KW_SNR_VAL in line):
+            timestamp_match = re.search(r'^(\d+\.\d+)', line)
+            snr_match = re.search(r'snr(\d+)', line)
+            fm_match = re.search(r'frame(\d+)', line)
+            sl_match = re.search(r'slot(\d+)', line)
+            if timestamp_match and snr_match and fm_match and sl_match:
+                timestamp = float(timestamp_match.group(1))
+                fm_value = int(fm_match.group(1))
+                sl_value = int(sl_match.group(1))
+                snr_value = int(snr_match.group(1))
+            else:
+                logger.warning(f"[GNB] For {KW_SNR_VAL}, could not find properties in line {line_number-1}. Skipping this '{KW_SNR_DEC}'")
+                continue
+
+            # Add the extracted values the snr_arr list
+            snr_arr = {
+                KW_SNR_DEC : {
+                    'timestamp' : timestamp,
+                    'frame': fm_value,
+                    'slot': sl_value,
+                    'snr': snr_value,
+                }
+            }           
+        
+            snr_values.append(flatten_dict(snr_arr))
     
-    # # Convert the list of dicts to a DataFrame
-    # df = pd.DataFrame(rsrp_snr_values)
-    # return df
+    # Convert the list of dicts to a DataFrame
+    df = pd.DataFrame(snr_values)
+    return df
 
