@@ -10,7 +10,7 @@ if not os.getenv('DEBUG'):
 class ULPacketAnalyzer:
     def __init__(self, db_addr=None, 
                  nlmt_df=None, gnb_ip_packets_df=None, gnb_rlc_segments_df=None,
-                 gnb_iprlc_rel_df=None, gnb_mac_attempts_df=None, gnb_mcs_reports_df=None, gnb_rssi_values_df=None, gnb_ulcqi_values_df=None, gnb_rsrp_values_df=None, gnb_snr_values_df=None,
+                 gnb_iprlc_rel_df=None, gnb_mac_attempts_df=None, gnb_mcs_reports_df=None,
                  ue_ip_packets_df=None, ue_rlc_segments_df=None,
                  ue_mac_attempts_df=None, ue_iprlc_rel_df=None):
 
@@ -39,18 +39,6 @@ class ULPacketAnalyzer:
     
             self.gnb_mac_attempts_df = pd.read_sql('SELECT * FROM gnb_mac_attempts', conn)
             logger.debug(f"gnb_mac_attempts_df: {self.gnb_mac_attempts_df.columns.tolist()}")
-
-            self.gnb_rssi_values_df = pd.read_sql('SELECT * FROM gnb_rssi_values', conn)
-            logger.debug(f"gnb_rssi_values_df: {self.gnb_rssi_values_df.columns.tolist()}")
-
-            self.gnb_ulcqi_values_df = pd.read_sql('SELECT * FROM gnb_ulcqi_values', conn)
-            logger.debug(f"gnb_ulcqi_values_df: {self.gnb_ulcqi_values_df.columns.tolist()}")
-
-            self.gnb_rsrp_values_df = pd.read_sql('SELECT * FROM gnb_rsrp_values', conn)
-            logger.debug(f"gnb_rsrp_values_df: {self.gnb_rsrp_values_df.columns.tolist()}")
-
-            self.gnb_snr_values_df = pd.read_sql('SELECT * FROM gnb_snr_values', conn)
-            logger.debug(f"gnb_snr_values_df: {self.gnb_snr_values_df.columns.tolist()}")
     
             self.ue_ip_packets_df = pd.read_sql('SELECT * FROM ue_ip_packets', conn)
             logger.debug(f"ue_ip_packets_df: {self.ue_ip_packets_df.columns.tolist()}")
@@ -95,10 +83,6 @@ class ULPacketAnalyzer:
             self.gnb_mac_attempts_df = gnb_mac_attempts_df
             self.gnb_mcs_reports_df = gnb_mcs_reports_df
             self.gnb_mcs_reports_df = gnb_mcs_reports_df
-            self.gnb_rssi_values_df = gnb_rssi_values_df
-            self.gnb_ulcqi_values_df = gnb_ulcqi_values_df
-            self.gnb_rsrp_values_df = gnb_rsrp_values_df
-            self.gnb_snr_values_df = gnb_snr_values_df
             self.ue_ip_packets_df = ue_ip_packets_df
             self.ue_rlc_segments_df = ue_rlc_segments_df
             self.ue_mac_attempts_df = ue_mac_attempts_df
@@ -153,6 +137,7 @@ class ULPacketAnalyzer:
         for idx, ue_rlc_srn in enumerate(ue_rlc_srn_list):
             if not silent:
                 print(f"\rProcessing packet {idx + 1}/{len(ue_rlc_srn_list)} ({(idx + 1) / len(ue_rlc_srn_list) * 100:.2f}%) with ip_id: {ue_rlc_srn}", end="")
+            
             filtered_df = self.ue_iprlc_rel_df[self.ue_iprlc_rel_df['rlc.txpdu.srn'] == ue_rlc_srn]
             ipid_set = set()
             txpdu_id_set = set()
@@ -265,6 +250,12 @@ class ULPacketAnalyzer:
         for idx, ip_id in enumerate(sorted_ids_list):
             if not silent:
                 print(f"\rProcessing packet {idx + 1}/{len(sorted_ids_list)} ({(idx + 1) / len(sorted_ids_list) * 100:.2f}%) with ip_id: {ip_id}", end="")
+            
+            # # For debug purposes - By Wilson
+            # if idx == 100:
+            #     print("\rReached 100 packet ids")
+            #     break
+
             ue_ip_row = self.ue_ip_packets_df[self.ue_ip_packets_df['ip_id'] == ip_id].iloc[0]
             filtered_df = self.ue_iprlc_rel_df[self.ue_iprlc_rel_df['ip_id'] == ip_id]
             sn_set = set()
@@ -423,7 +414,6 @@ class ULPacketAnalyzer:
                     break
 
             # set the rest of the mac attempt
-            # New version: 7th Nov 2025: Added fields measuring rssi, wideband cqi, noise power, receive power
             macattempt = {
                 'len' : ue_mac_attempt['phy.tx.len'],
                 'id' : ue_mac_attempt['mac_id'],
@@ -435,10 +425,6 @@ class ULPacketAnalyzer:
                 'rbs' : int(ue_mac_attempt[f'phy.tx.nb_rb']),
                 'symbols' : int(ue_mac_attempt[f'phy.tx.nb_sym']),
                 'mcs' : int(mac_mcs_value),
-                'rssi' : None,
-                'wideband_cqi' : None,
-                'noise_pwr' : None,
-                'rx_pwr' : None,
                 'phy.decode_t' : None,
                 'phy.out_t' : None,
                 'acked' : False,
@@ -476,10 +462,6 @@ class ULPacketAnalyzer:
                 else:
                     # possibly successful harq attempt
                     macattempt['phy.decode_t'] = float(gnb_mac_attempt['phy.decodeend.timestamp'])
-                    macattempt['rssi'] = float(gnb_mac_attempt['phy.measure.rssi'])
-                    macattempt['wideband_cqi'] = float(gnb_mac_attempt['phy.measure.wband_cqi'])
-                    macattempt['noise_pwr'] = float(gnb_mac_attempt['phy.measure.n0_power'])
-                    macattempt['rx_pwr'] = float(gnb_mac_attempt['phy.measure.rx_power'])
                     if gnb_mac_attempt['phy.decodeend.suc']:
                         # possibly successful gnb harq attempt
 
@@ -532,9 +514,10 @@ class ULPacketAnalyzer:
         num_ue_rlc_attempts = len(ue_rlc_rows)
         logger.debug(f"Number of ue RLC attempts {num_ue_rlc_attempts}")
 
+        # Added mac.sdu.tbs and rlc.txpdu.tbs to check for transport block size parameter
+
         # Iterate over each ue rlc attempt
         # ue_rlc_segments_df: ['txpdu_id', 'rlc.txpdu.M1buf', 'rlc.txpdu.R2buf', 'rlc.txpdu.sn', 'rlc.txpdu.srn', 'rlc.txpdu.so', 'rlc.txpdu.tbs', 'rlc.txpdu.timestamp', 'rlc.txpdu.length', 'rlc.txpdu.leno', 'rlc.txpdu.ENTno', 'rlc.txpdu.retx', 'rlc.txpdu.retxc', 'rlc.report.timestamp', 'rlc.report.num', 'rlc.report.ack', 'rlc.report.tpollex', 'mac.sdu.lcid', 'mac.sdu.tbs', 'mac.sdu.frame', 'mac.sdu.slot', 'mac.sdu.timestamp', 'mac.sdu.length', 'mac.sdu.M2buf', 'rlc.resegment.old_leno', 'rlc.resegment.old_so', 'rlc.resegment.other_seg_leno', 'rlc.resegment.other_seg_so', 'rlc.resegment.pdu_header_len', 'rlc.resegment.pdu_len']
-        # Added support to extract transport block size (tbs) information
         for i in range(num_ue_rlc_attempts):
             rlcattempt = {
                 'id' : i,

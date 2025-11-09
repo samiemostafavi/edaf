@@ -16,7 +16,7 @@ if not os.getenv('DEBUG'):
 # This file is for associating the different parameters that are saved in the database files. 
 
 
-result_database_file = '/home/wilsonan/edaf_new/edaf/nov4_results/database2_07112025.db'
+result_database_file = '/home/wilsonan/edaf_new/edaf/nov9_results/database_09112025.db'
 
 if __name__ == "__main__":
 
