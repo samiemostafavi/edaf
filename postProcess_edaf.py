@@ -24,12 +24,12 @@ logger.remove()
 logger.add(sys.stdout, level="ERROR")
 
 DB_FILE = '/home/wilsonan/edaf_new/edaf/nov9_results/database_09112025.db'
-CSV_FILE = '/home/wilsonan/edaf_new/edaf/nov9_results/delayCal_09112025_v1.csv'
+CSV_FILE = '/home/wilsonan/edaf_new/edaf/nov9_results/delayCal_09112025_v2.csv'
 
 # Packet analyzer
 analyzer = ULPacketAnalyzer(DB_FILE)
-# uids_arr = range(analyzer.first_ueipid, analyzer.last_ueipid+1)
-uids_arr = range(analyzer.first_ueipid, analyzer.first_ueipid+1000)
+uids_arr = range(analyzer.first_ueipid, analyzer.last_ueipid+1)
+# uids_arr = range(analyzer.first_ueipid, analyzer.first_ueipid+10000)
 packets = analyzer.figure_packettx_from_ueipids(uids_arr)
 #packets_rnti_set = set([item['rlc.attempts'][0]['rnti'] for item in packets if item['rlc.attempts'][0]['rnti']==list(packets_rnti_set)[0] or item['rlc.attempts'][0]['rnti']==None])
 packets_rnti_set = set([item['rlc.attempts'][0]['rnti'] for item in packets if item['rlc.attempts'][0]['rnti']!=None])
@@ -241,3 +241,4 @@ df.to_csv(CSV_FILE, index=False)
 
 # TODO: Find out ways to debug the database file in minimum time, else this will take a long time than anticipated.
 # TODO: Add postprocessing utils folder containing relevant utility scripts like finding retransmission number, excel conversion, etc.
+# TODO: The last values added: noise power, received power, rssi, wideband cqi show values such as 'None'. This needs to be handled. This is maybe due to unsuccessful harq retransmissions.

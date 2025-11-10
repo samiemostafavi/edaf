@@ -240,7 +240,10 @@ def get_noisePwr(max_rlc_seg):
     noisePwrVal = 0
     lenMacAttempts = len(max_rlc_seg['mac.attempts'])
     for i in range(lenMacAttempts):
-        noisePwrVal = noisePwrVal + max_rlc_seg['mac.attempts'][i]['noise_pwr']
+        max_rlc_seg_noisePwr = max_rlc_seg['mac.attempts'][i]['noise_pwr']
+        if max_rlc_seg_noisePwr == None:
+            max_rlc_seg_noisePwr = int(0)
+        noisePwrVal = noisePwrVal + max_rlc_seg_noisePwr
     
     # return the average noise power for the rlc segment with maximum delay
     avgNoisePwr = float(noisePwrVal/lenMacAttempts)
@@ -251,7 +254,10 @@ def get_rssi(max_rlc_seg):
     rssiVal = 0
     lenMacAttempts = len(max_rlc_seg['mac.attempts'])
     for i in range(lenMacAttempts):
-        rssiVal = rssiVal + max_rlc_seg['mac.attempts'][i]['rssi']
+        max_rlc_seg_rssi = max_rlc_seg['mac.attempts'][i]['rssi']
+        if max_rlc_seg_rssi == None:
+            max_rlc_seg_rssi = int(0)
+        rssiVal = rssiVal + max_rlc_seg_rssi
     
     # return the average rssi for the rlc segment with maximum delay
     avgRssi = float(rssiVal/lenMacAttempts)
@@ -262,7 +268,10 @@ def get_wbandCqi(max_rlc_seg):
     wbandCqiVal = 0
     lenMacAttempts = len(max_rlc_seg['mac.attempts'])
     for i in range(lenMacAttempts):
-        wbandCqiVal = wbandCqiVal + max_rlc_seg['mac.attempts'][i]['wideband_cqi']
+        max_rlc_seg_wbandCqi = max_rlc_seg['mac.attempts'][i]['wideband_cqi']
+        if max_rlc_seg_wbandCqi == None:
+            max_rlc_seg_wbandCqi = int(0)
+        wbandCqiVal = wbandCqiVal + max_rlc_seg_wbandCqi
     
     # return the average wideband cqi for the rlc segment with maximum delay
     avgWidebandCqi = float(wbandCqiVal/lenMacAttempts)
@@ -273,7 +282,10 @@ def get_rxPwr(max_rlc_seg):
     rxPwrVal = 0
     lenMacAttempts = len(max_rlc_seg['mac.attempts'])
     for i in range(lenMacAttempts):
-        rxPwrVal = rxPwrVal + max_rlc_seg['mac.attempts'][i]['rx_pwr']
+        max_rlc_seg_rxPwr = max_rlc_seg['mac.attempts'][i]['rx_pwr']
+        if max_rlc_seg_rxPwr == None:
+            max_rlc_seg_rxPwr = int(0)
+        rxPwrVal = rxPwrVal + max_rlc_seg_rxPwr
     
     # return the average received power for the rlc segment with maximum delay
     avgRxPwr = float(rxPwrVal/lenMacAttempts)
