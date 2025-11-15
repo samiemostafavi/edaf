@@ -18,7 +18,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/exp_edaf.py",
             "console": "integratedTerminal",
-            "args": ["data/", "nov4_results/database1.db"]
+            "args": ["data/Nov13th/", "nov13_results/database1.db"]
         }, 
     ]
 }

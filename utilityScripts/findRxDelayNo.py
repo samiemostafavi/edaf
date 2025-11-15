@@ -1,10 +1,9 @@
 import pandas as pd
 
 # Load the CSV file
-df = pd.read_csv("/home/wilsonan/Causal6G/edafMeasurements/edaf_develop/measurements/delayCal17_updated.csv")   # replace with your file name
+df = pd.read_csv("/home/wilsonan/edaf_new/edaf/nov13_results/delayCal_13112025_v1.csv")   # replace with your file name
 
 # Choose the column you want to check
-column_name = "retx_delays"  # replace with actual column name
 column_name = "Retransmission delay"
 # Count values greater than 0
 count = (df[column_name] > 0).sum()

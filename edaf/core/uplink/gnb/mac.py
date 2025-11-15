@@ -140,12 +140,12 @@ def find_mac_successful_attempts(previous_lines : RingBuffer, lines, silent = Fa
                 logger.warning(f"[GNB] Could not find '{KW_MAC_DETEND}' before {line_number} for {KW_MAC_DEC}")
                 mac_dec_arr[KW_MAC_DETEND] = {}
 
-            # find 'PHY' for rssi, cqi measurements# PHY rnti3cde.rssi-138.rssi_digital44.n_rb_ul8.wband_cqi127.n0_power0.rx_power23584.frame984.slot18
+            # find 'phy.measure.rssi' for rssi, cqi measurements# phy.measure.rssi rnti3cde.rssi-138.rssi_digital44.n_rb_ul8.wband_cqi127.n0_power0.rx_power23584.frame984.slot18
             found_RSSI_VAL = False            
-            KW_RSSI_VAL = 'PHY'
+            KW_RSSI_VAL = 'phy.measure.rssi'
             KW_RSSI_DEC = 'phy.measure'
-            fmstr = f'frame{fm_value}'
-            slstr = f'slot{sl_value}'
+            fmstr = f'fm{fm_value}'
+            slstr = f'sl{sl_value}'
             for jd,prev_ljne in enumerate(prev_lines):
                 if (KW_RSSI_VAL in prev_ljne) and (fmstr in prev_ljne) and (slstr in prev_ljne):
                     timestamp_match = re.search(r'^(\d+\.\d+)', prev_ljne)
@@ -156,8 +156,8 @@ def find_mac_successful_attempts(previous_lines : RingBuffer, lines, silent = Fa
                     wband_cqi_match = re.search(r'wband_cqi(\d+)', prev_ljne)
                     n0_power_match = re.search(r'n0_power(\d+)', prev_ljne)
                     rx_power_match = re.search(r'rx_power(\d+)', prev_ljne)
-                    fm_match = re.search(r'frame(\d+)', prev_ljne)
-                    sl_match = re.search(r'slot(\d+)', prev_ljne)
+                    fm_match = re.search(r'fm(\d+)', prev_ljne)
+                    sl_match = re.search(r'sl(\d+)', prev_ljne)
                     if timestamp_match and rssi_match and rssiDigital_match and fm_match and sl_match and n_rb_ul_match and wband_cqi_match and n0_power_match and rx_power_match:
                         timestamp = float(timestamp_match.group(1))
                         fm_value = int(fm_match.group(1))
@@ -345,8 +345,8 @@ def find_rssi_values(previous_lines : RingBuffer, lines, silent = False):
         KW_RSSI_DEC = 'rssiVal'
 
         # find line starting with 'PHY'
-        # PHY rnti3cde.rssi-138.rssi_digital44.n_rb_ul8.wband_cqi127.n0_power0.rx_power23584.frame984.slot18
-        KW_RSSI_VAL = 'PHY'
+        # phy.measure.rssi rnti3cde.rssi-138.rssi_digital44.n_rb_ul8.wband_cqi127.n0_power0.rx_power23584.fm984.sl18
+        KW_RSSI_VAL = 'phy.measure.rssi'
         if (KW_RSSI_VAL in line):
             timestamp_match = re.search(r'^(\d+\.\d+)', line)
             rnti_match = re.search(r'rnti([0-9a-fA-F]+)', line)
@@ -356,8 +356,8 @@ def find_rssi_values(previous_lines : RingBuffer, lines, silent = False):
             wband_cqi_match = re.search(r'wband_cqi(\d+)', line)
             n0_power_match = re.search(r'n0_power(\d+)', line)
             rx_power_match = re.search(r'rx_power(\d+)', line)
-            fm_match = re.search(r'frame(\d+)', line)
-            sl_match = re.search(r'slot(\d+)', line)
+            fm_match = re.search(r'fm(\d+)', line)
+            sl_match = re.search(r'sl(\d+)', line)
             if timestamp_match and rssi_match and rssiDigital_match and fm_match and sl_match and n_rb_ul_match and wband_cqi_match and n0_power_match and rx_power_match:
                 timestamp = float(timestamp_match.group(1))
                 fm_value = int(fm_match.group(1))
@@ -402,9 +402,9 @@ def find_ulcqi_values(previous_lines : RingBuffer, lines, silent = False):
         line = line.replace('\n', '')
         previous_lines.append(line)
 
-        # find 'PHY2MAC' for crc_rssi, ul_cqi measurements
-        # 174909208664010951 U PHY2MAC rssi992.ul_cqi187.hqpid1.CC_idP0.gnb_mod_idP0.fm857.sl18.len24.ta31.rnti3cde       
-        KW_UL_CQI_VAL = 'PHY2MAC'
+        # find 'phy.measure.ulcqi' for crc_rssi, ul_cqi measurements
+        # 174909208664010951 U phy.measure.ulcqi rssi992.ul_cqi187.hqpid1.CC_idP0.gnb_mod_idP0.fm857.sl18.len24.ta31.rnti3cde       
+        KW_UL_CQI_VAL = 'phy.measure.ulcqi'
         KW_UL_CQI_DEC = 'phy2mac.measure'
         if (KW_UL_CQI_VAL in line):
             timestamp_match = re.search(r'^(\d+\.\d+)', line)
@@ -493,19 +493,19 @@ def find_rsrp_values(previous_lines : RingBuffer, lines, silent = False):
         line = line.replace('\n', '')
         previous_lines.append(line)
 
-        # find 'sr.received' for rsrp measurements
-        # 174909209485186107 U sr.received rsrp-94.rnti3cde.frame892.slot4  
+        # find 'phy.measure.rsrp' for rsrp measurements
+        # 174909209485186107 U phy.measure.rsrp rsrp-94.rnti3cde.fm892.sl4  
         # 
         # ? : Why slot is always 4 in snr and rsrp measurements     
-        KW_RSRP_VAL = 'sr.received'
+        KW_RSRP_VAL = 'phy.measure.rsrp'
         KW_RSRP_DEC = 'phy.rsrp_measure'
         # found_rsrp_val = False
         if (KW_RSRP_VAL in line):
             timestamp_match = re.search(r'^(\d+\.\d+)', line)
             rnti_match = re.search(r'rnti([0-9a-fA-F]+)', line)
             rsrp_match = re.search(r'rsrp(-?\d+)', line)
-            fm_match = re.search(r'frame(\d+)', line)
-            sl_match = re.search(r'slot(\d+)', line)
+            fm_match = re.search(r'fm(\d+)', line)
+            sl_match = re.search(r'sl(\d+)', line)
             if timestamp_match and rsrp_match and fm_match and sl_match:
                 timestamp = float(timestamp_match.group(1))
                 fm_value = int(fm_match.group(1))
@@ -541,17 +541,17 @@ def find_snr_values(previous_lines : RingBuffer, lines, silent = False):
         line = line.replace('\n', '')
         previous_lines.append(line)
 
-        # find 'PHY NR Estimation' for snr measurements
-        # 174909209485172091 U PHY NR Estimation frame892.slot4.snr10  
+        # find 'phy.measure.snr' for snr measurements
+        # 174909209485172091 U phy.measure.snr fm892.sl4.snr10  
         # 
         # ? : Why slot is always 4 in snr and rsrp measurements     
-        KW_SNR_VAL = 'PHY NR Estimation'
+        KW_SNR_VAL = 'phy.measure.snr'
         KW_SNR_DEC = 'phy.snr_measure'
         if (KW_SNR_VAL in line):
             timestamp_match = re.search(r'^(\d+\.\d+)', line)
             snr_match = re.search(r'snr(\d+)', line)
-            fm_match = re.search(r'frame(\d+)', line)
-            sl_match = re.search(r'slot(\d+)', line)
+            fm_match = re.search(r'fm(\d+)', line)
+            sl_match = re.search(r'sl(\d+)', line)
             if timestamp_match and snr_match and fm_match and sl_match:
                 timestamp = float(timestamp_match.group(1))
                 fm_value = int(fm_match.group(1))
