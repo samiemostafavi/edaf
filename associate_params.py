@@ -9,6 +9,8 @@ from edaf.core.uplink.analyze_scheduling import ULSchedulingAnalyzer
 import sqlite3
 import numpy as np
     
+np.set_printoptions(suppress=True)
+
 if not os.getenv('DEBUG'):
     logger.remove()
     logger.add(sys.stdout, level="INFO")
@@ -16,17 +18,19 @@ if not os.getenv('DEBUG'):
 # This file is for associating the different parameters that are saved in the database files. 
 
 
-result_database_file = '/home/wilsonan/edaf_new/edaf/nov9_results/database_09112025.db'
+result_database_file = '/home/wilsonan/edaf_new/edaf/nov13_results/database1.db'
 
 if __name__ == "__main__":
 
     # Post process examples:
     # 1) Packet analyzer
     packet_analyzer = ULPacketAnalyzer(db_addr=result_database_file)
-    uids_arr = range(packet_analyzer.first_ueipid, packet_analyzer.last_ueipid+1)
+    uids_arr = range(packet_analyzer.first_ueipid, packet_analyzer.first_ueipid+100)
+    # uids_arr = range(packet_analyzer.first_ueipid, packet_analyzer.last_ueipid+1)
     # UE_PACKET_INSERTIONS = 100
     # uids_arr = list(range(packet_analyzer.first_ueipid, packet_analyzer.first_ueipid + UE_PACKET_INSERTIONS))
     packets_dict = packet_analyzer.figure_packettx_from_ueipids(uids_arr)
+    snr_dict = packet_analyzer.figure_snr_from_packets(packets_dict)
     print(packets_dict)
 
     # # 2) Channel analyzer

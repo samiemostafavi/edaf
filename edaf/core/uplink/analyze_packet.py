@@ -332,6 +332,94 @@ class ULPacketAnalyzer:
             print("\n", end="")
         return packets
 
+    def figure_snr_from_packets(self, packets_dict):
+        
+        DEBUG_SNR = True
+
+        # Packet level SNR info 
+        pktSNR = []
+
+        # Extract the SNR info dataframe
+        snr_df = self.gnb_snr_values_df
+
+        # Find out the SNR value that is measured in between the packet in time and packet out time. 
+        # In case the SNR is measured at a time other than the packet in time and packet out time, then find the average SNR value. The average SNR value is calculated between the SNR values measured just before the packet in time and just after the packet out time.
+        for pkt in packets_dict:
+            t_in  = pkt['ip.in_t']
+            t_out = pkt['ip.out_t']
+
+            # Filter SNR values inside interval
+            snr_segment = snr_df[(snr_df['phy.snr_measure.timestamp'] >= t_in) &
+                                (snr_df['phy.snr_measure.timestamp'] <= t_out)]
+            
+            # If snr_segment is empty then, take nearest BEFORE t_in and nearest AFTER t_out
+            if snr_segment.empty:
+
+                ts = snr_df['phy.snr_measure.timestamp']
+
+                # ---- Find closest BEFORE t_in ----
+                before_mask = ts < t_in
+                if before_mask.any():
+                    idx_before = (t_in - ts[before_mask]).idxmin()
+                    seg_before = snr_df.loc[[idx_before]]
+                else:
+                    seg_before = pd.DataFrame()  # No sample before t_in (edge case)
+
+                # ---- Find closest AFTER t_out ----
+                after_mask = ts > t_out
+                if after_mask.any():
+                    idx_after = (ts[after_mask] - t_out).idxmin()
+                    seg_after = snr_df.loc[[idx_after]]
+                else:
+                    seg_after = pd.DataFrame()  # No sample after t_out (edge case)
+
+                # Combine (only non-empty)
+                snr_segment = pd.concat([seg_before, seg_after])
+
+                # Compute mean_snr. Other values like snr values and snr timestamps are stored in the data structure.
+                snr_values = snr_segment['phy.snr_measure.snr'].tolist()
+                mean_snr   = sum(snr_values) / len(snr_values) 
+                snr_timestamp = snr_segment['phy.snr_measure.timestamp'].tolist()
+            else:
+                snr_values = snr_segment['phy.snr_measure.snr'].tolist()
+                mean_snr = snr_segment['phy.snr_measure.snr'].mean()
+                snr_timestamp = snr_segment['phy.snr_measure.timestamp'].iloc[0]
+
+            # Start the SNR dictionary with relevant packet information
+            pktSNR.append({
+                'sn' : pkt['sn'],
+                'id' : pkt['id'],
+                'ip.in_t' : pkt['ip.in_t'],
+                'ip.out_t' : pkt['ip.out_t'],
+                'snr_timestamp' : snr_timestamp,
+                'snr_values' : snr_values,
+                "mean_snr" : mean_snr,
+            })
+
+
+        if DEBUG_SNR:
+            # Find packets where snr_values is empty
+            empty_snr_packets = [pkt for pkt in pktSNR if len(pkt['snr_values']) == 0]
+
+            # Count them
+            empty_count = len(empty_snr_packets)
+
+            print("Number of packets with empty SNR:", empty_count)
+            print("Packets with empty SNR values:")
+            for pkt in empty_snr_packets:
+                print(pkt)
+
+            
+            # Extract packets where SNR list is NOT empty
+            non_empty_snr_packets = [pkt for pkt in pktSNR 
+                                    if len(pkt['snr_values']) > 0]
+
+            # Print them
+            print("Packets with non-empty SNR values:")
+            for pkt in non_empty_snr_packets:
+                print(pkt)
+
+        return pktSNR
 
     def figure_mac_attempts(self, rlcattempt, ue_rlc_row, ue_ip_in_ts, ue_ip_out_ts):
 
