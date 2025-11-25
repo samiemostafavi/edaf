@@ -290,3 +290,17 @@ def get_rxPwr(max_rlc_seg):
     # return the average received power for the rlc segment with maximum delay
     avgRxPwr = float(rxPwrVal/lenMacAttempts)
     return avgRxPwr
+
+# Return average snr value for the packet
+def get_snr_for_packet(packet, snr_list):
+    for snr in snr_list:
+        if snr['sn'] == packet['sn'] and snr['id'] == packet['id']:
+            return snr['mean_snr']    # Found match
+    return None  # No match
+
+# Return average rsrp value for the packet
+def get_rsrp_for_packet(packet, rsrp_list):
+    for rsrp in rsrp_list:
+        if rsrp['sn'] == packet['sn'] and rsrp['id'] == packet['id']:
+            return rsrp['mean_rsrp']    # Found match
+    return None  # No match

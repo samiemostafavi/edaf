@@ -10,10 +10,10 @@
 import pandas as pd
 
 # Read the CSV file
-df = pd.read_csv("/home/wilsonan/edaf_new/edaf/nov13_results/delayCal_13112025_v1.csv")
+df = pd.read_csv("/home/wilsonan/edaf_new/edaf/nov13_results/delayCal_13112025_v3.csv")
 
 # Keep only the first 39,800 rows
-df_limited = df.iloc[:39800]
+df_limited = df.iloc[:32000]
 
 # Save to Excel
-df_limited.to_excel("/home/wilsonan/edaf_new/edaf/nov13_results/delayCal_13112025_v1.xlsx", index=False,float_format="%.15g")
+df_limited.to_excel("/home/wilsonan/edaf_new/edaf/nov13_results/delayCal_13112025_v3.xlsx", index=False,float_format="%.15g")

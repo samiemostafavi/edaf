@@ -24,13 +24,15 @@ logger.remove()
 logger.add(sys.stdout, level="ERROR")
 
 DB_FILE = '/home/wilsonan/edaf_new/edaf/nov13_results/database1.db'
-CSV_FILE = '/home/wilsonan/edaf_new/edaf/nov13_results/delayCal_13112025_v1.csv'
+CSV_FILE = '/home/wilsonan/edaf_new/edaf/nov13_results/delayCal_13112025_v3.csv'
 
 # Packet analyzer
 analyzer = ULPacketAnalyzer(DB_FILE)
 uids_arr = range(analyzer.first_ueipid, analyzer.last_ueipid+1)
-# uids_arr = range(analyzer.first_ueipid, analyzer.first_ueipid+10000)
+# uids_arr = range(analyzer.first_ueipid, analyzer.first_ueipid+100)
 packets = analyzer.figure_packettx_from_ueipids(uids_arr)
+snr_dict = analyzer.figure_snr_from_packets(packets)
+rsrp_dict = analyzer.figure_rsrp_from_packets(packets)
 #packets_rnti_set = set([item['rlc.attempts'][0]['rnti'] for item in packets if item['rlc.attempts'][0]['rnti']==list(packets_rnti_set)[0] or item['rlc.attempts'][0]['rnti']==None])
 packets_rnti_set = set([item['rlc.attempts'][0]['rnti'] for item in packets if item['rlc.attempts'][0]['rnti']!=None])
 print(f'RNTIs in packets: {list(packets_rnti_set)}')
@@ -194,6 +196,8 @@ avgNoisePwr = []
 avgRssi = []
 avgRxPwr = []
 avgWidebandCqi = []
+avgSnr = []
+avgRsrp = []
 for packet in packets:
     max_rlc_seg = get_max_rlc_seg(packet)
     mcsIdx = get_mcs(packet, mcs_sorted_dict, slots_per_frame=20, slots_duration_ms=0.5)
@@ -209,6 +213,8 @@ for packet in packets:
     avgRssi.append(get_rssi(max_rlc_seg))
     avgRxPwr.append(get_rxPwr(max_rlc_seg))
     avgWidebandCqi.append(get_wbandCqi(max_rlc_seg))
+    avgSnr.append(get_snr_for_packet(packet, snr_dict))
+    avgRsrp.append(get_rsrp_for_packet(packet, rsrp_dict))
     
 
 # Load CSV into a DataFrame
@@ -229,6 +235,8 @@ df["Noise Power (Avg)"] = pd.Series(avgNoisePwr)
 df["Received Power (Avg)"] = pd.Series(avgRxPwr)
 df["RSSI (Avg)"] = pd.Series(avgRssi)
 df["Wideband CQI (Avg)"] = pd.Series(avgWidebandCqi)
+df["SNR (Avg)"] = pd.Series(avgSnr)
+df["RSRP (Avg)"] = pd.Series(avgRsrp)
 
 
 # 3. Reorder columns to move new ones to the front

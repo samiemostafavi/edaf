@@ -332,9 +332,9 @@ class ULPacketAnalyzer:
             print("\n", end="")
         return packets
 
-    def figure_snr_from_packets(self, packets_dict):
+    def figure_snr_from_packets(self, packets):
         
-        DEBUG_SNR = True
+        DEBUG_SNR = False
 
         # Packet level SNR info 
         pktSNR = []
@@ -344,7 +344,7 @@ class ULPacketAnalyzer:
 
         # Find out the SNR value that is measured in between the packet in time and packet out time. 
         # In case the SNR is measured at a time other than the packet in time and packet out time, then find the average SNR value. The average SNR value is calculated between the SNR values measured just before the packet in time and just after the packet out time.
-        for pkt in packets_dict:
+        for pkt in packets:
             t_in  = pkt['ip.in_t']
             t_out = pkt['ip.out_t']
 
@@ -420,6 +420,96 @@ class ULPacketAnalyzer:
                 print(pkt)
 
         return pktSNR
+    
+    def figure_rsrp_from_packets(self, packets):
+        
+        DEBUG_RSRP = False
+
+        # Packet level RSRP info 
+        pktRSRP = []
+
+        # Extract the RSRP info dataframe
+        rsrp_df = self.gnb_rsrp_values_df
+
+        # Find out the RSRP value that is measured in between the packet in time and packet out time. 
+        # In case the RSRP is measured at a time other than the packet in time and packet out time, then find the average RSRP value. The average RSRP value is calculated between the RSRP values measured just before the packet in time and just after the packet out time.
+        for pkt in packets:
+            t_in  = pkt['ip.in_t']
+            t_out = pkt['ip.out_t']
+
+            # Filter RSRP values inside interval
+            rsrp_segment = rsrp_df[(rsrp_df['phy.rsrp_measure.timestamp'] >= t_in) &
+                                (rsrp_df['phy.rsrp_measure.timestamp'] <= t_out)]
+            
+            # If rsrp_segment is empty then, take nearest BEFORE t_in and nearest AFTER t_out
+            if rsrp_segment.empty:
+
+                ts = rsrp_df['phy.rsrp_measure.timestamp']
+
+                # ---- Find closest BEFORE t_in ----
+                before_mask = ts < t_in
+                if before_mask.any():
+                    idx_before = (t_in - ts[before_mask]).idxmin()
+                    seg_before = rsrp_df.loc[[idx_before]]
+                else:
+                    seg_before = pd.DataFrame()  # No sample before t_in (edge case)
+
+                # ---- Find closest AFTER t_out ----
+                after_mask = ts > t_out
+                if after_mask.any():
+                    idx_after = (ts[after_mask] - t_out).idxmin()
+                    seg_after = rsrp_df.loc[[idx_after]]
+                else:
+                    seg_after = pd.DataFrame()  # No sample after t_out (edge case)
+
+                # Combine (only non-empty)
+                rsrp_segment = pd.concat([seg_before, seg_after])
+
+                # Compute mean_rsrp. Other values like rsrp values and rsrp timestamps are stored in the data structure.
+                rsrp_values = rsrp_segment['phy.rsrp_measure.rsrp'].tolist()
+                mean_rsrp   = sum(rsrp_values) / len(rsrp_values) 
+                rsrp_timestamp = rsrp_segment['phy.rsrp_measure.timestamp'].tolist()
+            else:
+                rsrp_values = rsrp_segment['phy.rsrp_measure.rsrp'].tolist()
+                mean_rsrp = rsrp_segment['phy.rsrp_measure.rsrp'].mean()
+                rsrp_timestamp = rsrp_segment['phy.rsrp_measure.timestamp'].iloc[0]
+
+            # Start the RSRP dictionary with relevant packet information
+            pktRSRP.append({
+                'sn' : pkt['sn'],
+                'id' : pkt['id'],
+                'ip.in_t' : pkt['ip.in_t'],
+                'ip.out_t' : pkt['ip.out_t'],
+                'rsrp_timestamp' : rsrp_timestamp,
+                'rsrp_values' : rsrp_values,
+                "mean_rsrp" : mean_rsrp,
+            })
+
+
+        if DEBUG_RSRP:
+            # Find packets where rsrp_values is empty
+            empty_rsrp_packets = [pkt for pkt in pktRSRP if len(pkt['rsrp_values']) == 0]
+
+            # Count them
+            empty_count = len(empty_rsrp_packets)
+
+            print("Number of packets with empty RSRP:", empty_count)
+            print("Packets with empty RSRP values:")
+            for pkt in empty_rsrp_packets:
+                print(pkt)
+
+            
+            # Extract packets where RSRP list is NOT empty
+            non_empty_rsrp_packets = [pkt for pkt in pktRSRP 
+                                    if len(pkt['rsrp_values']) > 0]
+
+            # Print them
+            print("Packets with non-empty RSRP values:")
+            for pkt in non_empty_rsrp_packets:
+                print(pkt)
+
+        return pktRSRP
+    
 
     def figure_mac_attempts(self, rlcattempt, ue_rlc_row, ue_ip_in_ts, ue_ip_out_ts):
 

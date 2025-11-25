@@ -9,7 +9,7 @@ from edaf.core.uplink.analyze_scheduling import ULSchedulingAnalyzer
 import sqlite3
 import numpy as np
     
-np.set_printoptions(suppress=True)
+# np.set_printoptions(suppress=True)
 
 if not os.getenv('DEBUG'):
     logger.remove()
@@ -31,6 +31,7 @@ if __name__ == "__main__":
     # uids_arr = list(range(packet_analyzer.first_ueipid, packet_analyzer.first_ueipid + UE_PACKET_INSERTIONS))
     packets_dict = packet_analyzer.figure_packettx_from_ueipids(uids_arr)
     snr_dict = packet_analyzer.figure_snr_from_packets(packets_dict)
+    rsrp_dict = packet_analyzer.figure_rsrp_from_packets(packets_dict)
     print(packets_dict)
 
     # # 2) Channel analyzer
