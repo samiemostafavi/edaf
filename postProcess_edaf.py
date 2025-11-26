@@ -23,13 +23,19 @@ from itertools import zip_longest
 logger.remove()
 logger.add(sys.stdout, level="ERROR")
 
+DEBUG_FILE = False
+
 DB_FILE = '/home/wilsonan/edaf_new/edaf/nov13_results/database1.db'
 CSV_FILE = '/home/wilsonan/edaf_new/edaf/nov13_results/delayCal_13112025_v4.csv'
 
 # Packet analyzer
 analyzer = ULPacketAnalyzer(DB_FILE)
-# uids_arr = range(analyzer.first_ueipid, analyzer.last_ueipid+1)
-uids_arr = range(analyzer.first_ueipid, analyzer.first_ueipid+100)
+
+if DEBUG_FILE:
+    uids_arr = range(analyzer.first_ueipid, analyzer.first_ueipid+100)
+else:
+    uids_arr = range(analyzer.first_ueipid, analyzer.last_ueipid+1)
+
 packets = analyzer.figure_packettx_from_ueipids(uids_arr)
 snr_dict = analyzer.figure_snr_from_packets(packets)
 rsrp_dict = analyzer.figure_rsrp_from_packets(packets)
