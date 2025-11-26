@@ -24,12 +24,12 @@ logger.remove()
 logger.add(sys.stdout, level="ERROR")
 
 DB_FILE = '/home/wilsonan/edaf_new/edaf/nov13_results/database1.db'
-CSV_FILE = '/home/wilsonan/edaf_new/edaf/nov13_results/delayCal_13112025_v3.csv'
+CSV_FILE = '/home/wilsonan/edaf_new/edaf/nov13_results/delayCal_13112025_v4.csv'
 
 # Packet analyzer
 analyzer = ULPacketAnalyzer(DB_FILE)
-uids_arr = range(analyzer.first_ueipid, analyzer.last_ueipid+1)
-# uids_arr = range(analyzer.first_ueipid, analyzer.first_ueipid+100)
+# uids_arr = range(analyzer.first_ueipid, analyzer.last_ueipid+1)
+uids_arr = range(analyzer.first_ueipid, analyzer.first_ueipid+100)
 packets = analyzer.figure_packettx_from_ueipids(uids_arr)
 snr_dict = analyzer.figure_snr_from_packets(packets)
 rsrp_dict = analyzer.figure_rsrp_from_packets(packets)
@@ -198,6 +198,7 @@ avgRxPwr = []
 avgWidebandCqi = []
 avgSnr = []
 avgRsrp = []
+avgUlcqi = []
 for packet in packets:
     max_rlc_seg = get_max_rlc_seg(packet)
     mcsIdx = get_mcs(packet, mcs_sorted_dict, slots_per_frame=20, slots_duration_ms=0.5)
@@ -215,6 +216,7 @@ for packet in packets:
     avgWidebandCqi.append(get_wbandCqi(max_rlc_seg))
     avgSnr.append(get_snr_for_packet(packet, snr_dict))
     avgRsrp.append(get_rsrp_for_packet(packet, rsrp_dict))
+    avgUlcqi.append(get_ulcqi(max_rlc_seg))
     
 
 # Load CSV into a DataFrame
@@ -237,6 +239,7 @@ df["RSSI (Avg)"] = pd.Series(avgRssi)
 df["Wideband CQI (Avg)"] = pd.Series(avgWidebandCqi)
 df["SNR (Avg)"] = pd.Series(avgSnr)
 df["RSRP (Avg)"] = pd.Series(avgRsrp)
+df["Ul CQI (Avg)"] = pd.Series(avgUlcqi)
 
 
 # 3. Reorder columns to move new ones to the front
@@ -248,5 +251,4 @@ df.to_csv(CSV_FILE, index=False)
 
 
 # TODO: Find out ways to debug the database file in minimum time, else this will take a long time than anticipated.
-# TODO: Add postprocessing utils folder containing relevant utility scripts like finding retransmission number, excel conversion, etc.
-# TODO: The last values added: noise power, received power, rssi, wideband cqi show values such as 'None'. This needs to be handled. This is maybe due to unsuccessful harq retransmissions.
+# TODO: The values added: noise power, received power, rssi, wideband cqi show values such as 'None'. This needs to be handled. This is maybe due to unsuccessful harq retransmissions.

@@ -617,6 +617,7 @@ class ULPacketAnalyzer:
                 'wideband_cqi' : None,
                 'noise_pwr' : None,
                 'rx_pwr' : None,
+                'ul_cqi' : None,
                 'phy.decode_t' : None,
                 'phy.out_t' : None,
                 'acked' : False,
@@ -661,10 +662,25 @@ class ULPacketAnalyzer:
                     if gnb_mac_attempt['phy.decodeend.suc']:
                         # possibly successful gnb harq attempt
 
-                        macattempt['phy.out_t'] = float(gnb_mac_attempt['phy.decodeend.timestamp']) 
+                        macattempt['phy.out_t'] = float(gnb_mac_attempt['phy.decodeend.timestamp'])                 
+
                         hq_s = int(gnb_mac_attempt['phy.detectend.hqpid'])
                         fm_s = int(gnb_mac_attempt['phy.detectend.frame'])
                         sl_s = int(gnb_mac_attempt['phy.detectend.slot'])
+                        
+                        # Insert the ul_cqi values here if the transmission is successful
+                        gnb_ulcqi_values = self.gnb_ulcqi_values_df
+                        ulcqi_match = gnb_ulcqi_values[(gnb_ulcqi_values['phy2mac.measure.frame'] == fm_s) &
+                                                  (gnb_ulcqi_values['phy2mac.measure.slot'] == sl_s) &
+                                                   (gnb_ulcqi_values['phy2mac.measure.hqpid'] == hq_s)]
+                        
+                        # If the ulcqi line has a match with the frame, slot and hqpid, then add it to the macattempt structure
+                        if ulcqi_match.empty:
+                            print(f"No UL_CQI match for frame={fm_s}, slot={sl_s}, hqpid={hq_s}")
+                        else:
+                            # print("UL_CQI Match found:")
+                            macattempt['ul_cqi'] = ulcqi_match['phy2mac.measure.ul_cqi'].iloc[0]
+
 
                         # find rlc segment of this mac attempt
                         # use hq_s, fm_s, and sl_s which belong to the last mac attempt

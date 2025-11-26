@@ -277,6 +277,21 @@ def get_wbandCqi(max_rlc_seg):
     avgWidebandCqi = float(wbandCqiVal/lenMacAttempts)
     return avgWidebandCqi
 
+# Get the average ulcqi for the rlc segment that experiences maximum delay
+def get_ulcqi(max_rlc_seg):
+    ulcqiVal = 0
+    lenMacAttempts = len(max_rlc_seg['mac.attempts'])
+    for i in range(lenMacAttempts):
+        max_rlc_seg_ulcqi = max_rlc_seg['mac.attempts'][i]['ul_cqi']
+        if max_rlc_seg_ulcqi == None:
+            max_rlc_seg_ulcqi = int(0)
+        ulcqiVal = ulcqiVal + max_rlc_seg_ulcqi
+    
+    # return the average ulcqi for the rlc segment with maximum delay
+    avgUlcqi = float(ulcqiVal/lenMacAttempts)
+    return avgUlcqi
+
+
 # Get the average received power for the rlc segment that experiences maximum delay
 def get_rxPwr(max_rlc_seg):
     rxPwrVal = 0
