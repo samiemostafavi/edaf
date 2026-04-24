@@ -164,6 +164,9 @@ cython_debug/
 results/
 influxdbv2/
 data/
+segIssueDebug/
+workspace/
+scripts/
 *.lseq
 *.parquet
 *.db
